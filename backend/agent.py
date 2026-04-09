@@ -1,35 +1,42 @@
 import os
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-
 class SQLPerformanceAgent:
     def __init__(self):
-        self.llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0) # Temp 0 for consistency
+        # We use a lower temperature to prevent 'wandering' text
+        self.llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0) 
         self.prompt = ChatPromptTemplate.from_template("""
-        You are an Expert Database Reliability Engineer (DBRE).
-        Analyze the query performance issue using ONLY the retrieved cases.
+        SYSTEM: You are a Database Reliability Engineer. Your only job is to return structured JSON analysis based on provided cases.
         
-        RELEVANT CASES:
+        INSTRUCTIONS:
+        1. Compare the USER_QUERY to the RETRIEVED_CASES.
+        2. Select the most technically relevant case.
+        3. Output ONLY the JSON object. Do not explain your reasoning outside the JSON.
+        
+        RETRIEVED_CASES:
         {context}
         
-        USER QUERY ISSUE:
+        USER_QUERY:
         {question}
         
-        Return ONLY a valid JSON object:
+        EXPECTED_OUTPUT_FORMAT:
         {{
-            "problem": "Name of the issue",
-            "root_cause": "Brief technical reason",
-            "suggestion": "Specific fix to apply",
+            "problem": "Name from the matching case",
+            "root_cause": "Technical reason from the matching case",
+            "suggestion": "Specific fix from the matching case",
             "confidence": "high/medium/low"
         }}
         """)
 
     def analyze(self, user_query, retrieved_docs):
-        # Format the metadata from RAG into a string for the prompt
-        context_str = ""
-        for i, d in enumerate(retrieved_docs):
-            context_str += f"\nCASE {i+1}: {d.metadata['problem']}\nCause: {d.metadata['root_cause']}\nFix: {d.metadata['suggestion']}\n"
+        # Professional move: Extract and clean context explicitly
+        context_str = "\n".join([
+            f"Case Match: {d.page_content}\nMetadata: {d.metadata}" 
+            for d in retrieved_docs
+        ])
         
         chain = self.prompt | self.llm
         response = chain.invoke({"context": context_str, "question": user_query})
-        return response.content
+        
+        # Strip any accidental whitespace or markdown markers
+        return response.content.strip().replace("```json", "").replace("```", "")

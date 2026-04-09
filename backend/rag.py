@@ -1,42 +1,61 @@
 import json
+import os
+import re
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
-class RAGManager:
-    def __init__(self, db_path="./chroma_db"):
-        self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        self.db_path = db_path
-        self.vectordb = None
+def load_dataset(path="dataset.json"):
+    with open(path, "r") as f:
+        return json.load(f)
 
-    def initialize_from_json(self, json_file):
-        with open(json_file, "r") as f:
-            data = json.load(f)
-        
-        documents = []
-        for case in data:
-            # We search based on the query and context
-            content = f"Query: {case['query']}\nContext: {case['context']}"
-            
-            # Metadata allows the LLM to 'see' the diagnosis directly
-            metadata = {
-                "problem": case["problem"],
-                "root_cause": case["root_cause"],
+def case_to_text(case):
+    return f"""
+Title: {case['title']}
+Query: {case['query']}
+Execution Time: {case['execution_time']}
+Frequency: {case['frequency']}
+Context: {case['context']}
+Problem: {case['problem']}
+Root Cause: {case['root_cause']}
+Suggestion: {case['suggestion']}
+Severity: {case['severity']}
+""".strip()
+
+def build_vectordb(dataset_path="dataset.json"):
+    dataset = load_dataset(dataset_path)
+    documents = []
+    for case in dataset:
+        text = case_to_text(case)
+        doc = Document(
+            page_content=text,
+            metadata={
+                "case_id": case["case_id"],
+                "title": case["title"],
+                "severity": case["severity"],
                 "suggestion": case["suggestion"],
-                "severity": case["severity"]
+                "root_cause": case["root_cause"],
+                "problem": case["problem"]
             }
-            documents.append(Document(page_content=content, metadata=metadata))
-        
-        self.vectordb = Chroma.from_documents(
-            documents, 
-            self.embeddings, 
-            persist_directory=self.db_path
         )
-        print(f"✅ RAG initialized with {len(data)} scenarios.")
+        documents.append(doc)
+    print(f"Loaded {len(documents)} cases into documents")
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    vectordb = Chroma.from_documents(
+        documents=documents,
+        embedding=embeddings,
+        persist_directory="chroma_db"
+    )
+    print("Vector DB built and saved to chroma_db/")
+    return vectordb
 
-    def retrieve_context(self, user_query, k=2):
-        if not self.vectordb:
-            self.vectordb = Chroma(persist_directory=self.db_path, embedding_function=self.embeddings)
-        
-        docs = self.vectordb.similarity_search(user_query, k=k)
-        return docs
+def load_vectordb():
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return Chroma(
+        persist_directory="chroma_db",
+        embedding_function=embeddings
+    )
+
+def search_cases(query, k=3):
+    vectordb = load_vectordb()
+    return vectordb.similarity_search(query, k=k)

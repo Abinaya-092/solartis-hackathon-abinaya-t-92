@@ -1,0 +1,122 @@
+[
+  {
+    "case_id": 1,
+    "title": "Full Table Scan",
+    "query": "SELECT * FROM large_table",
+    "execution_time": "2469 seconds",
+    "frequency": "low",
+    "context": "Large table, no filtering, full table scan, no WHERE clause",
+    "problem": "Full table scan",
+    "root_cause": "No WHERE clause, no index used, fetches every row",
+    "suggestion": "Add WHERE clause to filter rows. Add index on commonly filtered columns. Use LIMIT for pagination.",
+    "severity": "critical"
+  },
+  {
+    "case_id": 2,
+    "title": "JSON Field Filtering",
+    "query": "SELECT * FROM policy_data WHERE JSON_EXTRACT(data, '$.policy.state') = 'CA'",
+    "execution_time": "25 seconds",
+    "frequency": "medium",
+    "context": "No index on JSON field, large dataset, JSON_EXTRACT in WHERE clause",
+    "problem": "Unindexed JSON extraction in WHERE clause",
+    "root_cause": "JSON_EXTRACT on unindexed field forces full table scan on every row",
+    "suggestion": "Create a generated column for policy_state and index it. Avoid JSON_EXTRACT in WHERE clause.",
+    "severity": "high"
+  },
+  {
+    "case_id": 3,
+    "title": "High Frequency Config Query",
+    "query": "SELECT * FROM config_table WHERE key = ?",
+    "execution_time": "low individually",
+    "frequency": "very high - thousands of times per minute",
+    "context": "Fast query but hammers database repeatedly, no caching",
+    "problem": "High frequency repeated lookup on static data",
+    "root_cause": "No caching layer, every request hits DB even for unchanging config data",
+    "suggestion": "Cache config_table results in Redis with 5 minute TTL. Eliminates 90% of DB load.",
+    "severity": "medium"
+  },
+  {
+    "case_id": 4,
+    "title": "Complex Join with JSON Processing",
+    "query": "SELECT * FROM policy_data p JOIN claims_data c ON p.policy_id = c.policy_id JOIN config_table cfg ON JSON_TABLE(...)",
+    "execution_time": "medium - 8 seconds",
+    "frequency": "medium",
+    "context": "Multiple table joins combined with JSON_TABLE extraction",
+    "problem": "Expensive join chain with JSON processing",
+    "root_cause": "JSON_TABLE is expensive, multiple joins multiply the cost exponentially",
+    "suggestion": "Denormalize JSON fields into proper columns. Index all join keys. Consider materialized views for complex joins.",
+    "severity": "high"
+  },
+  {
+    "case_id": 5,
+    "title": "Anomaly - Sudden Latency Spike",
+    "query": "SELECT * FROM policy_data WHERE status = ACTIVE",
+    "execution_time": "spiked from 1 second to 50 seconds suddenly",
+    "frequency": "high",
+    "context": "Previously fast query, sudden degradation, no code change",
+    "problem": "Anomaly detected - sudden latency spike 50x normal",
+    "root_cause": "Table bloat from dead tuples, lock contention, or missing autovacuum",
+    "suggestion": "Run ANALYZE on table. Check pg_locks for contention. Review autovacuum. Consider table partitioning.",
+    "severity": "critical"
+  },
+  {
+    "case_id": 6,
+    "title": "Nested Subquery",
+    "query": "SELECT * FROM policy_data WHERE policy_id IN (SELECT policy_id FROM claims_data WHERE claim_amount > 5000)",
+    "execution_time": "high - 45 seconds",
+    "frequency": "low",
+    "context": "Subquery inside WHERE clause, not correlated but unoptimized",
+    "problem": "Inefficient nested subquery",
+    "root_cause": "Subquery executes for every outer row, not optimized to JOIN",
+    "suggestion": "Rewrite as JOIN instead of subquery. Add index on claim_amount and policy_id in claims_data.",
+    "severity": "high"
+  },
+  {
+    "case_id": 7,
+    "title": "Aggregation with Multiple Joins",
+    "query": "SELECT COUNT(*), SUM(claim_amount) FROM claims_data JOIN policy_data JOIN config_table GROUP BY state",
+    "execution_time": "medium - 12 seconds",
+    "frequency": "medium",
+    "context": "COUNT and SUM across multiple joined tables",
+    "problem": "Heavy aggregation across large joined dataset",
+    "root_cause": "No partial aggregation, full dataset loaded before grouping",
+    "suggestion": "Add composite index on (state, claim_amount). Consider pre-aggregated summary tables updated nightly.",
+    "severity": "medium"
+  },
+  {
+    "case_id": 8,
+    "title": "Large Logging Table Query",
+    "query": "SELECT * FROM system_logs WHERE created_date > '2024-01-01'",
+    "execution_time": "very high - 180 seconds",
+    "frequency": "low",
+    "context": "Querying billions of rows in logging table, no partitioning",
+    "problem": "Full scan on massive unpartitioned logging table",
+    "root_cause": "Logging tables grow unbounded, no partitioning by date, no archiving",
+    "suggestion": "Partition table by month. Archive logs older than 90 days. Add index on created_date.",
+    "severity": "critical"
+  },
+  {
+    "case_id": 9,
+    "title": "Update Query Performance",
+    "query": "UPDATE policy_data SET status = 'EXPIRED' WHERE end_date < NOW()",
+    "execution_time": "high - 60 seconds",
+    "frequency": "daily batch",
+    "context": "Bulk update on large table, locks entire table during update",
+    "problem": "Bulk update causing table lock and slow performance",
+    "root_cause": "No index on end_date, full scan to find rows, table lock blocks reads",
+    "suggestion": "Add index on end_date. Batch updates in chunks of 1000 rows. Run during off-peak hours.",
+    "severity": "high"
+  },
+  {
+    "case_id": 10,
+    "title": "Knowledge Base Config Lookup",
+    "query": "SELECT * FROM knowledge_base WHERE category = ? AND key = ?",
+    "execution_time": "medium - 3 seconds",
+    "frequency": "very high",
+    "context": "Configuration-driven system, knowledge base queried on every request",
+    "problem": "Repeated knowledge base lookup with no caching",
+    "root_cause": "Composite key lookup without proper index, high frequency amplifies cost",
+    "suggestion": "Add composite index on (category, key). Cache entire knowledge base in application memory at startup.",
+    "severity": "medium"
+  }
+]

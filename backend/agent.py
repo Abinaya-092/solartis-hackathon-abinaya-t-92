@@ -1,4 +1,3 @@
-import os
 import re
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,7 +14,7 @@ RETRIEVED_CASES:
 USER_QUERY:
 {question}
 
-Return ONLY this JSON:
+Return ONLY this JSON with confidence being strictly one of: high, medium, or low:
 {{
     "problem": "problem name from matching case",
     "root_cause": "technical root cause",
@@ -31,6 +30,5 @@ Return ONLY this JSON:
         ])
         chain = self.prompt | self.llm
         raw = chain.invoke({"context": context_str, "question": user_query}).content.strip()
-        # Strip any markdown fences the LLM sneaks in
         raw = re.sub(r"```json|```", "", raw).strip()
         return raw

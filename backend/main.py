@@ -36,6 +36,7 @@ DB_KEYWORDS = ["query", "select", "table", "index", "slow", "database",
                "latency", "timeout", "performance", "cache", "lock"]
 
 VALID_CONFIDENCE = {"high", "medium", "low"}
+VALID_PRIORITY = {"high", "medium", "low"}
 
 # ── Request models ────────────────────────────────────────────────
 class QueryRequest(BaseModel):
@@ -47,6 +48,9 @@ class AnomalyRequest(BaseModel):
     current_time: str
     baseline_time: str
 
+class AskRequest(BaseModel):
+    question: str
+
 # ── Endpoint 1: /analyze/query ────────────────────────────────────
 @app.post("/analyze/query")
 def analyze_query(request: QueryRequest):
@@ -55,7 +59,6 @@ def analyze_query(request: QueryRequest):
     Returns: problem, root_cause, suggestion, confidence.
     """
     try:
-        # Domain validation
         if not any(word in request.query.lower() for word in DB_KEYWORDS):
             return {
                 "error": "Query does not appear to be database-related.",
@@ -71,7 +74,6 @@ def analyze_query(request: QueryRequest):
         raw = agent.analyze(request.query, docs)
         result = json.loads(raw)
 
-        # Normalize confidence
         if result.get("confidence") not in VALID_CONFIDENCE:
             result["confidence"] = "high"
 
@@ -110,7 +112,6 @@ def detect_anomaly(request: AnomalyRequest):
         )
         result = json.loads(raw)
 
-        # Normalize confidence
         if result.get("confidence") not in VALID_CONFIDENCE:
             result["confidence"] = "high"
 
@@ -133,7 +134,6 @@ def suggest_optimization(request: QueryRequest):
     Returns: optimizations list with priority and impact.
     """
     try:
-        # Domain validation
         if not any(word in request.query.lower() for word in DB_KEYWORDS):
             return {
                 "error": "Query does not appear to be database-related.",
@@ -143,7 +143,7 @@ def suggest_optimization(request: QueryRequest):
 
         docs = search_cases(request.query, k=3)
         context_str = "\n\n".join([
-            f"Case: {d.metadata['title']}\nSuggestion: {d.metadata['suggestion']}\nSeverity: {d.metadata['severity']}\nImpact: Resolving this can significantly reduce query execution time and DB load."
+            f"Case: {d.metadata['title']}\nSuggestion: {d.metadata['suggestion']}\nSeverity: {d.metadata['severity']}\nSpecific Impact: {d.metadata['suggestion']}"
             for d in docs
         ])
 
@@ -156,11 +156,17 @@ QUERY PATTERN: {question}
 RELEVANT CASES:
 {context}
 
-Return ONLY this exact JSON format:
+Return ONLY this exact JSON format.
+Priority rules: 
+- "high" = fixes the core performance problem directly
+- "medium" = important but secondary improvement  
+- "low" = nice to have, minimal immediate impact
+Not everything can be high priority. Distribute priorities realistically.
+Impact must be a specific measurable outcome like "eliminates full table scan" or "reduces DB load by 90%":
 {{
   "optimizations": [
-    {{"priority": "high", "action": "specific technical action to take", "impact": "what improvement this will cause"}},
-    {{"priority": "medium", "action": "specific technical action to take", "impact": "what improvement this will cause"}}
+    {{"priority": "high", "action": "specific technical action to take", "impact": "specific measurable outcome"}},
+    {{"priority": "medium", "action": "specific technical action to take", "impact": "specific measurable outcome"}}
   ],
   "estimated_improvement": "e.g. 80% reduction in query time",
   "confidence": "high/medium/low"
@@ -171,11 +177,123 @@ Return ONLY this exact JSON format:
         raw = re.sub(r"```json|```", "", raw).strip()
         result = json.loads(raw)
 
-        # Normalize confidence
         if result.get("confidence") not in VALID_CONFIDENCE:
             result["confidence"] = "high"
 
+        for opt in result.get("optimizations", []):
+            if opt.get("priority") not in VALID_PRIORITY:
+                opt["priority"] = "high"
+
         return result
+
+    except json.JSONDecodeError:
+        return {"raw_response": raw, "error": "LLM returned non-JSON."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Endpoint 4: /ask — Natural Language Front Door ────────────────
+@app.post("/ask")
+def ask(request: AskRequest):
+    """
+    Accepts any natural language question about SQL performance.
+    Automatically detects intent and routes to the right analysis.
+    """
+    try:
+        question = request.question.strip()
+
+        # Step 1: Domain validation
+        if not any(word in question.lower() for word in DB_KEYWORDS):
+            return {
+                "error": "Question does not appear to be database-related.",
+                "suggestion": "Try asking about slow queries, indexes, joins, or performance issues.",
+                "confidence": "low"
+            }
+
+        # Step 2: Intent detection
+        intent_llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+        intent_prompt = ChatPromptTemplate.from_template("""
+You are a query intent classifier. Read the user's question carefully.
+
+Definitions:
+- "anomaly": user mentions a SUDDEN change, spike, or unexpected degradation that wasn't there before. Keywords: suddenly, spike, jumped, used to be fast, no code changes, unexpectedly.
+- "optimization": user asks HOW TO IMPROVE or WHAT TO CHANGE proactively. Keywords: how can I, what should I change, optimize, improve, best way.
+- "analysis": user asks WHY something is slow or wants a diagnosis. This is the default for most questions.
+
+User question: {question}
+
+Return ONLY one word: anomaly, optimization, or analysis
+""")
+        intent_chain = intent_prompt | intent_llm
+        intent = intent_chain.invoke({"question": question}).content.strip().lower()
+
+        if intent not in {"anomaly", "optimization", "analysis"}:
+            intent = "analysis"
+
+        # Step 3: Route to the right logic
+        if intent == "anomaly":
+            docs = search_cases(f"sudden latency spike anomaly {question}", k=2)
+            raw = agent.analyze(question, docs)
+            result = json.loads(raw)
+            if result.get("confidence") not in VALID_CONFIDENCE:
+                result["confidence"] = "high"
+            result["intent_detected"] = "anomaly"
+            result["matched_cases"] = [d.metadata["title"] for d in docs]
+            return result
+
+        elif intent == "optimization":
+            docs = search_cases(question, k=3)
+            context_str = "\n\n".join([
+                f"Case: {d.metadata['title']}\nSuggestion: {d.metadata['suggestion']}\nSeverity: {d.metadata['severity']}\nSpecific Impact: {d.metadata['suggestion']}"
+                for d in docs
+            ])
+            opt_llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+            opt_prompt = ChatPromptTemplate.from_template("""
+You are a Database Reliability Engineer. Return ONLY a JSON object.
+
+QUESTION: {question}
+RELEVANT CASES: {context}
+
+Priority rules: 
+- "high" = fixes the core performance problem directly
+- "medium" = important but secondary improvement  
+- "low" = nice to have, minimal immediate impact
+Not everything can be high priority. Distribute priorities realistically.
+Impact must be specific and measurable like "eliminates full table scan" or "reduces DB load by 90%".
+
+Return ONLY this JSON:
+{{
+  "optimizations": [
+    {{"priority": "high", "action": "specific technical action", "impact": "specific measurable outcome"}},
+    {{"priority": "medium", "action": "specific technical action", "impact": "specific measurable outcome"}}
+  ],
+  "estimated_improvement": "e.g. 80% reduction in query time",
+  "confidence": "high/medium/low"
+}}
+""")
+            opt_chain = opt_prompt | opt_llm
+            raw = opt_chain.invoke({"context": context_str, "question": question}).content.strip()
+            raw = re.sub(r"```json|```", "", raw).strip()
+            result = json.loads(raw)
+
+            if result.get("confidence") not in VALID_CONFIDENCE:
+                result["confidence"] = "high"
+            for opt in result.get("optimizations", []):
+                if opt.get("priority") not in VALID_PRIORITY:
+                    opt["priority"] = "high"
+
+            result["intent_detected"] = "optimization"
+            return result
+
+        else:  # analysis (default)
+            docs = search_cases(question, k=3)
+            raw = agent.analyze(question, docs)
+            result = json.loads(raw)
+            if result.get("confidence") not in VALID_CONFIDENCE:
+                result["confidence"] = "high"
+            result["intent_detected"] = "analysis"
+            result["matched_cases"] = [d.metadata["title"] for d in docs]
+            return result
 
     except json.JSONDecodeError:
         return {"raw_response": raw, "error": "LLM returned non-JSON."}
@@ -188,5 +306,5 @@ Return ONLY this exact JSON format:
 def root():
     return {
         "status": "running",
-        "endpoints": ["/analyze/query", "/detect/anomaly", "/suggest/optimization"]
+        "endpoints": ["/analyze/query", "/detect/anomaly", "/suggest/optimization", "/ask"]
     }

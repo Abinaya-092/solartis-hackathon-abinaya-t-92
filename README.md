@@ -1,4 +1,4 @@
-#  AI SQL Performance Analyzer
+# AI SQL Performance Analyzer
 ### Multi-Agent RAG System for Database Reliability Engineering
 
 **Submitted by:** Abinaya T  
@@ -10,7 +10,7 @@
 
 ## Problem Understanding
 
-In any data-intensive system, database performance is mission-critical. A single slow SQL query can cascade into system-wide degradation — affecting real users, real operations, and real revenue. A single slow SQL query isn't just a performance issue — it's a financial leak! 
+In any data-intensive system, database performance is mission-critical. A single slow SQL query can cascade into system-wide degradation — affecting real users, real operations, and real revenue.
 
 **The core challenge:**
 - Junior developers and support engineers lack the expertise to diagnose database performance issues that senior DBAs resolve intuitively
@@ -21,30 +21,30 @@ In any data-intensive system, database performance is mission-critical. A single
 
 ---
 
-##  Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
-    A["🧑‍💻 User Query\nNatural Language"] --> B["🛡️ Domain Validator\nRejects non-DB queries instantly"]
+    A["User Query\nNatural Language"] --> B["Domain Validator\nRejects non-DB queries instantly"]
     
-    B -->|"DB-related"| C["🔍 RAG Layer — ChromaDB\nSemantic search with confidence scoring"]
-    B -->|"Non-DB"| X1["❌ Rejected\nClean error message"]
+    B -->|"DB-related"| C["RAG Layer — ChromaDB\nSemantic search with confidence scoring"]
+    B -->|"Non-DB"| X1["Rejected\nClean error message"]
     
-    C -->|"Score < 1.2\nCONFIDENT"| D["🧠 Supervisor Agent\nOrchestrates specialist agents"]
-    C -->|"Score 1.2–1.5\nUNCERTAIN"| X2["⚠️ Honest Warning\nNo hallucination"]
-    C -->|"Score > 1.5\nOUT OF SCOPE"| X3["❌ Clean Rejection\nSimilarity too low"]
+    C -->|"Score < 1.2\nCONFIDENT"| D["Supervisor Agent\nOrchestrates specialist agents"]
+    C -->|"Score 1.2–1.5\nUNCERTAIN"| X2["Honest Warning\nNo hallucination — fix skipped"]
+    C -->|"Score > 1.5\nOUT OF SCOPE"| X3["Clean Rejection\nSimilarity too low"]
     
-    D --> E["🔬 DiagnosisAgent\nWHY is it slow?\nRAG + LLM reasoning"]
-    D --> F["🔧 FixAgent\nWHAT fixes it?\nLLM-generated SQL\n+ Safety Validator"]
-    D --> G["📊 ImpactAgent\nWHAT does it cost?\nBusiness impact\ncalculation"]
+    D --> E["DiagnosisAgent\nWHY is it slow?\nRAG + LLM reasoning"]
+    D --> F["FixAgent\nWHAT fixes it?\nLLM-generated SQL\n+ Safety Validator"]
+    D --> G["ImpactAgent\nWHAT does it cost?\nBusiness impact\ncalculation"]
     
-    E --> H["📋 Supervisor\nAssembles reasoning chain\n+ combines all outputs"]
+    E --> H["Supervisor\nAssembles reasoning chain\n+ combines all outputs"]
     F --> H
     G --> H
     
-    H --> I["⚙️ Technical Mode\nFor developers"]
-    H --> J["👤 Simple Mode\nFor support analysts"]
-    H --> K["💼 Executive Mode\nFor managers"]
+    H --> I["Technical Mode\nFor developers"]
+    H --> J["Simple Mode\nFor support analysts"]
+    H --> K["Executive Mode\nFor managers"]
     
     style A fill:#1a1a2e,color:#fff
     style D fill:#16213e,color:#fff
@@ -59,18 +59,19 @@ flowchart TD
     style J fill:#004a00,color:#fff
     style K fill:#004a00,color:#fff
 ```
+
 ---
 
-##  Key Features
+## Key Features
 
 ### 1. Multi-Agent Supervisor Architecture
-Three specialist agents orchestrated by a Supervisor — each with a single responsibility. The system returns a full **reasoning chain** showing every decision made, ensuring complete auditability — critical in regulated insurance environments.
+Three specialist agents orchestrated by a Supervisor — each with a single responsibility. The system returns a full **reasoning chain** showing every decision made, ensuring complete auditability — critical in regulated environments.
 
 ### 2. Advanced RAG with Confidence Scoring
 Goes beyond basic RAG with similarity threshold scoring:
-- Score < 1.2 → confident match → full analysis
-- Score 1.2–1.5 → uncertain → honest warning returned
-- Score > 1.5 → out of scope → clean rejection
+- Score < 1.2 → confident match → full analysis + fix executed
+- Score 1.2–1.5 → uncertain → honest warning returned, fix skipped to prevent harm
+- Score > 1.5 → out of scope → clean rejection with dynamic suggestions
 
 The system knows what it doesn't know. No hallucinated answers on edge cases.
 
@@ -80,6 +81,7 @@ The FixAgent doesn't just suggest fixes — it **executes them** on a real datab
 2. Safety validator whitelists only `CREATE INDEX`, `ANALYZE`, `VACUUM`
 3. Fix applied to real SQLite database with 1.7M rows
 4. Before/after performance measured and returned as proof
+5. Fix is skipped entirely if RAG confidence is uncertain — prevents dangerous actions
 
 ### 4. Natural Language Intent Router (`/ask`)
 Single endpoint that accepts anything a user types — raw SQL, plain English symptom description, or vague complaint. Intent classifier routes to the right analysis automatically.
@@ -90,18 +92,21 @@ Same diagnosis, three different explanations:
 - **Support:** "Users experience slow query performance and increased wait times"
 - **Executive:** "Business incurs significant productivity losses — urgency: HIGH"
 
-### 6. Enriched Knowledge Base
+### 6. Dynamic Suggestions on Uncertainty
+When a query is too vague, the system calls an LLM to generate contextually relevant suggestions based on what the user typed — not hardcoded options. "Did you mean one of these?" with clickable suggestions.
+
+### 7. Enriched Knowledge Base
 11 SQL performance cases enriched with real-world symptoms, detection signals, fix validation steps, and domain-specific context — enabling semantic matching on natural language descriptions, not just keywords.
 
 ---
 
-##  Tech Stack
+## Tech Stack
 
 | Component | Technology |
 |---|---|
-| LLM | LLaMA 3.1 8B via Groq API |
-| Embeddings | HuggingFace all-MiniLM-L6-v2 (local) |
-| Vector DB | ChromaDB (persistent) |
+| LLM | LLaMA 3.1 8B via Groq API (free) |
+| Embeddings | HuggingFace all-MiniLM-L6-v2 (runs locally) |
+| Vector DB | ChromaDB (persistent, local) |
 | Orchestration | LangChain LCEL |
 | API | FastAPI + Uvicorn |
 | Database | SQLite (1.7M rows — policy, claims, logs) |
@@ -109,7 +114,7 @@ Same diagnosis, three different explanations:
 
 ---
 
-##  Project Structure
+## Project Structure
 
 ```
 HACKATHON/
@@ -117,7 +122,7 @@ HACKATHON/
 ├── README.md
 ├── test_all.py           # Full automated test suite
 ├── backend/
-│   ├── main.py           # FastAPI — 6 endpoints
+│   ├── main.py           # FastAPI — 7 endpoints
 │   ├── supervisor.py     # Multi-agent orchestrator
 │   ├── agent.py          # DiagnosisAgent
 │   ├── executor.py       # FixAgent — LLM SQL + safety validator
@@ -131,34 +136,92 @@ HACKATHON/
     └── package.json
 ```
 
-##  How to Run
+---
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- Free Groq API key from [console.groq.com](https://console.groq.com)
+## How to Run
 
-### Backend Setup
+### Prerequisites — Install These First
+
+| Tool | Download | Check if installed |
+|---|---|---|
+| Python 3.10+ | [python.org](https://www.python.org/downloads/) | `python --version` |
+| Node.js 18+ | [nodejs.org](https://nodejs.org/) | `node --version` |
+| Git | [git-scm.com](https://git-scm.com/downloads/) | `git --version` |
+
+> After installing any tool, close and reopen your terminal before continuing.
+
+---
+
+### Step 1 — Get a Free Groq API Key
+
+1. Go to [console.groq.com](https://console.groq.com) (open in new tab)
+2. Create a free account
+3. Click **API Keys** in the left sidebar
+4. Click **Create API Key** and copy it
+5. Keep it — you will need it in Step 3
+
+---
+
+### Step 2 — Clone the Repository
+
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Abinaya-092/solartis-hackathon-abinaya-t-92
 cd solartis-hackathon-abinaya-t-92
+```
 
-# 2. Install dependencies
+---
+
+### Step 3 — Create the API Key File
+
+```bash
+cd backend
+```
+
+Create a file called `.env` inside the `backend/` folder with this exact content:
+
+```
+GROQ_API_KEY=your_api_key_here
+```
+
+Replace `your_api_key_here` with the key you copied in Step 1.
+
+On Windows PowerShell:
+```bash
+echo "GROQ_API_KEY=your_api_key_here" > .env
+```
+
+---
+
+### Step 4 — Install Backend Dependencies
+
+```bash
 pip install fastapi uvicorn langchain langchain-community langchain-groq
 pip install langchain-huggingface chromadb sentence-transformers python-dotenv
+```
 
-# 3. Create .env file in backend/
-echo "GROQ_API_KEY=your_key_here" > backend/.env
+---
 
-# 4. Start backend (auto-builds ChromaDB and seeds database on first run)
-cd backend
+### Step 5 — Start the Backend
+
+```bash
 python -m uvicorn main:app --reload
 ```
 
-### Frontend Setup
+**First run takes 3–5 minutes** — it will automatically:
+- Download the HuggingFace embedding model (~90MB)
+- Build ChromaDB from dataset.json
+- Seed SQLite database with 1.7M rows
+
+You will see `Uvicorn running on http://127.0.0.1:8000` when ready.
+
+---
+
+### Step 6 — Start the Frontend
+
+Open a **new terminal** (keep the backend running) and navigate back to the project root:
+
 ```bash
-# In a new terminal
+cd solartis-hackathon-abinaya-t-92
 cd frontend
 npm install
 npm run dev
@@ -166,25 +229,105 @@ npm run dev
 
 Open `http://localhost:5173` in your browser.
 
-**Note:** On first run, the system automatically:
-- Downloads the HuggingFace embedding model (~90MB)
-- Builds ChromaDB from dataset.json
-- Seeds SQLite with 1.7M rows (takes ~3 minutes)
+---
 
-Subsequent runs start in seconds.
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `git is not recognized` | Install Git from git-scm.com, restart terminal |
+| `pip is not recognized` | Use `pip3` instead of `pip` |
+| `python is not recognized` | Use `python3` instead of `python` |
+| `uvicorn is not recognized` | Use `python -m uvicorn` instead |
+| ChromaDB build fails | Delete `backend/chroma_db` folder and restart server |
+| Database seed fails | Delete `backend/database.db` and restart server |
 
 ---
 
-##  API Endpoints
+## Test Examples
+
+Once running, try these in the frontend or via `http://localhost:8000/docs`:
+
+### Happy Path — Clear Diagnosis
+```
+SELECT * FROM policy_data WHERE status = 'ACTIVE' is taking too long
+```
+```
+My JSON query using JSON_EXTRACT in WHERE clause is taking 25 seconds
+```
+```
+query on large_table with no WHERE clause is extremely slow
+```
+
+### Anomaly Detection
+```
+my query suddenly spiked from 1 second to 50 seconds with no code changes
+```
+```
+database was fine yesterday but extremely slow today
+```
+
+### Executive Mode (select Executive mode first)
+```
+our database queries are slow and affecting customers
+```
+
+### Edge Cases — System handles gracefully
+```
+stored procedure execution is slow
+```
+```
+my database connection keeps timing out
+```
+
+### Out of Scope — System rejects cleanly
+```
+how do I make pasta
+```
+```
+what is machine learning
+```
+
+### Direct API Testing
+Open `http://localhost:8000/docs` for interactive API documentation.
+
+**POST /analyze/full**
+```json
+{
+  "question": "SELECT * FROM policy_data WHERE status = 'ACTIVE' is slow",
+  "mode": "technical"
+}
+```
+
+**POST /detect/anomaly**
+```json
+{
+  "query": "SELECT * FROM policy_data WHERE status = 'ACTIVE'",
+  "baseline_time": "1s",
+  "current_time": "50s"
+}
+```
+
+**POST /ask**
+```json
+{
+  "question": "why is my JSON query slow?"
+}
+```
+
+---
+
+## API Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
 | `/analyze/full` | POST | **Main endpoint** — full multi-agent analysis |
 | `/ask` | POST | Natural language router with intent detection |
-| `/analyze/query` | POST | Direct query analysis |
-| `/detect/anomaly` | POST | Anomaly detection with spike ratio |
+| `/analyze/query` | POST | Direct query analysis with confidence scoring |
+| `/detect/anomaly` | POST | Anomaly detection with spike ratio calculation |
 | `/suggest/optimization` | POST | Prioritized optimization list |
 | `/analyze/and/fix` | POST | Agentic fix loop with before/after proof |
+| `/suggest/similar` | POST | Dynamic similar query suggestions |
 
 ### Example Request
 ```json
@@ -227,14 +370,13 @@ POST /analyze/full
     "user_facing": "Users experience slow policy search across all modules",
     "executive": "Business incurs productivity losses — HIGH urgency",
     "urgency": "high — impacts all users on every query"
-  },
-  "audience_summary": "Full table scan occurs on every query due to missing index on status column"
+  }
 }
 ```
 
 ---
 
-##  Design Decisions & Trade-offs
+## Design Decisions & Trade-offs
 
 ### Why SQLite over MySQL/PostgreSQL?
 SQLite requires zero installation — evaluators can run the system with a single command. In production, the system would connect to managed PostgreSQL (Supabase/RDS) with connection pooling. The agentic fix loop works identically regardless of the database backend.
@@ -242,19 +384,22 @@ SQLite requires zero installation — evaluators can run the system with a singl
 ### Why LLM-generated SQL over hardcoded patterns?
 Early versions used keyword-matching to map diagnoses to SQL fixes. This was brittle — "add index on status" and "create an index for the status field" would fail to match the same pattern. The LLM-generated approach handles any phrasing and any column name, while the safety validator ensures nothing dangerous executes.
 
+### Why fix is skipped on uncertain confidence?
+Executing a database fix based on a wrong diagnosis is worse than not fixing at all. If RAG confidence is uncertain (score 1.2–1.5), the system provides the diagnosis as a best guess but deliberately skips fix execution. This is a conscious safety decision — not a limitation.
+
 ### RAG Strategy Decisions
 I evaluated four advanced RAG strategies:
 - **HyDE** — rejected. At 11 cases, retrieval precision is already high. Would reconsider at 1000+ cases.
 - **Reranking** — rejected. LLM reranking doesn't scale; production would need Cohere Rerank.
 - **Multi-query retrieval** — rejected. Triples search cost with marginal benefit at small scale.
-- **Similarity threshold** -**implemented**. Zero cost, scales perfectly, prevents hallucination on edge cases.
+- **Similarity threshold** — implemented. Zero cost, scales perfectly, prevents hallucination on edge cases.
 
 ### Why three separate agents instead of one LLM call?
 Single responsibility principle. Each agent has one job, one system prompt, one output schema. This makes the system debuggable, testable, and extensible. Adding a new agent (e.g., a PredictionAgent for future trajectory) requires zero changes to existing agents.
 
 ---
 
-##  Production Scaling Considerations
+## Production Scaling Considerations
 
 *Answering the mandatory question: "If you were designing this system for production at scale, what would you change or improve?"*
 
@@ -281,7 +426,7 @@ Current safety validator whitelists `CREATE INDEX`, `ANALYZE`, `VACUUM`. Product
 
 ---
 
-##  AI Usage Disclosure
+## AI Usage Disclosure
 
 As required by the challenge guidelines:
 
@@ -305,7 +450,8 @@ As required by the challenge guidelines:
 - Added epistemic honesty — system admits uncertainty instead of hallucinating
 - Chose not to implement HyDE/reranking after analyzing production trade-offs
 - Designed audience-aware responses based on real user personas
-- Added `already_existed` fix handling to prevent misleading metrics
+- Added fix-skipping on uncertain confidence — safety-first decision
+- Dynamic suggestions generated per user input, not hardcoded
 
 **Challenges faced:**
 - LangChain version conflicts between `langchain.schema` and `langchain_core.documents`
@@ -314,7 +460,28 @@ As required by the challenge guidelines:
 
 ---
 
-##  Dataset
+## My Journey
+
+> "I walked in with zero RAG experience and walked out with a multi-agent AI system. Here's how."
+
+**Day 1** — Set up the stack. First working RAG pipeline. Understood embeddings by actually running them.
+
+**Day 2** — Enriched the dataset. Built FastAPI endpoints. Added natural language routing. Broke things. Fixed things.
+
+**Day 3** — Built the supervisor architecture. Three agents talking to each other. React frontend. This README.
+
+**The creative decisions I'm proud of:**
+- Chose SQLite over Supabase after honest risk analysis — portability over impressiveness
+- Added epistemic honesty — system admits when it doesn't know instead of hallucinating
+- Built audience-aware responses — same diagnosis, three different explanations
+- Evaluated HyDE, reranking, multi-query RAG — and consciously chose NOT to implement them
+- Skipped fix execution on uncertain confidence — because a wrong fix is worse than no fix
+
+Temperature = 0. Consistent. Deterministic. No creativity in the LLM. All creativity from me.
+
+---
+
+## Dataset
 
 11 SQL performance cases covering:
 - Full table scans
@@ -329,7 +496,7 @@ As required by the challenge guidelines:
 - Knowledge base config lookups
 - Missing index on filtered columns
 
-Each case enriched with: symptoms, detection signals, real-world insurance context, fix validation steps, and related patterns — enabling semantic matching on natural language descriptions.
+Each case enriched with: symptoms, detection signals, domain-specific context, fix validation steps, and related patterns — enabling semantic matching on natural language descriptions.
 
 ---
 

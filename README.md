@@ -22,7 +22,44 @@ Insurance platforms like Solartis process millions of policy transactions daily.
 ---
 
 ## 🏗️ Architecture
+## 🏗️ Architecture
 
+```mermaid
+flowchart TD
+    A["🧑‍💻 User Query\nNatural Language"] --> B["🛡️ Domain Validator\nRejects non-DB queries instantly"]
+    
+    B -->|"DB-related"| C["🔍 RAG Layer — ChromaDB\nSemantic search with confidence scoring"]
+    B -->|"Non-DB"| X1["❌ Rejected\nClean error message"]
+    
+    C -->|"Score < 1.2\nCONFIDENT"| D["🧠 Supervisor Agent\nOrchestrates specialist agents"]
+    C -->|"Score 1.2–1.5\nUNCERTAIN"| X2["⚠️ Honest Warning\nNo hallucination"]
+    C -->|"Score > 1.5\nOUT OF SCOPE"| X3["❌ Clean Rejection\nSimilarity too low"]
+    
+    D --> E["🔬 DiagnosisAgent\nWHY is it slow?\nRAG + LLM reasoning"]
+    D --> F["🔧 FixAgent\nWHAT fixes it?\nLLM-generated SQL\n+ Safety Validator"]
+    D --> G["📊 ImpactAgent\nWHAT does it cost?\nBusiness impact\ncalculation"]
+    
+    E --> H["📋 Supervisor\nAssembles reasoning chain\n+ combines all outputs"]
+    F --> H
+    G --> H
+    
+    H --> I["⚙️ Technical Mode\nFor developers"]
+    H --> J["👤 Simple Mode\nFor support analysts"]
+    H --> K["💼 Executive Mode\nFor managers"]
+    
+    style A fill:#1a1a2e,color:#fff
+    style D fill:#16213e,color:#fff
+    style E fill:#0f3460,color:#fff
+    style F fill:#0f3460,color:#fff
+    style G fill:#0f3460,color:#fff
+    style H fill:#16213e,color:#fff
+    style X1 fill:#4a0000,color:#fff
+    style X2 fill:#4a3500,color:#fff
+    style X3 fill:#4a0000,color:#fff
+    style I fill:#004a00,color:#fff
+    style J fill:#004a00,color:#fff
+    style K fill:#004a00,color:#fff
+```
 ---
 
 ## ✨ Key Features

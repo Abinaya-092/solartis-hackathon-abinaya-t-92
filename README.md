@@ -1,4 +1,4 @@
-# 🧠 Solartis AI SQL Performance Analyzer
+#  AI SQL Performance Analyzer
 ### Multi-Agent RAG System for Database Reliability Engineering
 
 **Submitted by:** Abinaya T  
@@ -92,6 +92,7 @@ Same diagnosis, three different explanations:
 
 ### 6. Enriched Knowledge Base
 11 SQL performance cases enriched with real-world symptoms, detection signals, fix validation steps, and domain-specific context — enabling semantic matching on natural language descriptions, not just keywords.
+
 ---
 
 ##  Tech Stack
@@ -107,6 +108,7 @@ Same diagnosis, three different explanations:
 | Frontend | React + Vite |
 
 ---
+
 ##  Project Structure
 
 ```

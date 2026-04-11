@@ -24,7 +24,7 @@ function ReasoningChain({ steps }) {
       fontSize: "13px",
     }}>
       <div style={{ color: "#6b7280", marginBottom: "12px", fontSize: "11px", letterSpacing: "2px" }}>
-        REASONING CHAIN
+        🧠 AI REASONING CHAIN
       </div>
       {steps.map((step, i) => (
         <div key={i} style={{
@@ -35,6 +35,7 @@ function ReasoningChain({ steps }) {
           color: step.includes("failed") ? "#f87171" :
                  step.includes("CONFIDENT") ? "#4ade80" :
                  step.includes("UNCERTAIN") ? "#fbbf24" :
+                 step.includes("skipped") ? "#fbbf24" :
                  step.includes("Delegating") ? "#60a5fa" :
                  step.includes("returned") || step.includes("generated") ? "#4ade80" :
                  "#d1d5db"
@@ -47,7 +48,7 @@ function ReasoningChain({ steps }) {
   );
 }
 
-function AgentCard({ title, icon, color, children }) {
+function AgentCard({ title, subtitle, color, children }) {
   return (
     <div style={{
       background: "#ffffff",
@@ -59,17 +60,29 @@ function AgentCard({ title, icon, color, children }) {
       minWidth: "280px",
       boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
     }}>
-      <div style={{
-        color,
-        fontSize: "12px",
-        letterSpacing: "2px",
-        marginBottom: "16px",
-        fontFamily: "'Courier New', monospace",
-        fontWeight: "700"
-      }}>
-        {icon} {title}
+      <div style={{ marginBottom: "4px" }}>
+        <span style={{
+          color,
+          fontSize: "11px",
+          letterSpacing: "2px",
+          fontFamily: "'Courier New', monospace",
+          fontWeight: "700"
+        }}>
+          {title}
+        </span>
       </div>
-      {children}
+      <div style={{
+        color: "#111827",
+        fontSize: "17px",
+        fontWeight: "700",
+        marginBottom: "16px",
+        letterSpacing: "-0.3px"
+      }}>
+        {subtitle}
+      </div>
+      <div style={{ borderTop: `1px solid ${color}22`, paddingTop: "16px" }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -77,20 +90,21 @@ function AgentCard({ title, icon, color, children }) {
 function Field({ label, value, highlight }) {
   if (!value) return null;
   return (
-    <div style={{ marginBottom: "12px" }}>
+    <div style={{ marginBottom: "14px" }}>
       <div style={{
         color: "#6b7280",
         fontSize: "10px",
         letterSpacing: "1px",
         fontFamily: "'Courier New', monospace",
         marginBottom: "4px",
-        fontWeight: "600"
+        fontWeight: "700",
+        textTransform: "uppercase"
       }}>
         {label}
       </div>
       <div style={{
-        color: highlight || "#111827",
-        fontSize: "13px",
+        color: highlight || "#1f2937",
+        fontSize: "14px",
         lineHeight: "1.6",
         fontWeight: highlight ? "600" : "400"
       }}>
@@ -116,7 +130,7 @@ function ConfidenceDots({ level }) {
       ))}
       <span style={{
         color,
-        fontSize: "11px",
+        fontSize: "12px",
         marginLeft: "6px",
         fontFamily: "'Courier New', monospace",
         fontWeight: "700"
@@ -133,7 +147,7 @@ function StatusBadge({ text, color }) {
       background: `${color}18`,
       border: `1px solid ${color}`,
       color,
-      padding: "3px 10px",
+      padding: "4px 12px",
       borderRadius: "4px",
       fontSize: "11px",
       fontFamily: "'Courier New', monospace",
@@ -151,6 +165,8 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [visibleSteps, setVisibleSteps] = useState([]);
+  const [dynamicSuggestions, setDynamicSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const animateChain = (steps) => {
     setVisibleSteps([]);
@@ -161,12 +177,35 @@ export default function App() {
     });
   };
 
+  const fetchDynamicSuggestions = async (userQuestion) => {
+    setLoadingSuggestions(true);
+    try {
+      const res = await fetch(`${API_BASE}/suggest/similar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: userQuestion })
+      });
+      const data = await res.json();
+      setDynamicSuggestions(data.suggestions || []);
+    } catch {
+      setDynamicSuggestions([
+        "Why is SELECT * FROM policy_data WHERE status = 'ACTIVE' slow?",
+        "My JSON query using JSON_EXTRACT is taking 25 seconds",
+        "Query suddenly spiked from 1s to 50s with no code changes",
+        "SELECT * FROM large_table with no WHERE clause is very slow"
+      ]);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!question.trim()) return;
     setLoading(true);
     setResult(null);
     setError(null);
     setVisibleSteps([]);
+    setDynamicSuggestions([]);
     try {
       const res = await fetch(`${API_BASE}/analyze/full`, {
         method: "POST",
@@ -176,12 +215,19 @@ export default function App() {
       const data = await res.json();
       setResult(data);
       if (data.reasoning_chain) animateChain(data.reasoning_chain);
+
+      // Fetch dynamic suggestions if out of scope or uncertain
+      if (data.status === "out_of_scope" || data.is_uncertain) {
+        fetchDynamicSuggestions(question);
+      }
     } catch (e) {
       setError("Failed to connect to API. Make sure the backend server is running on port 8000.");
     } finally {
       setLoading(false);
     }
   };
+
+  const isUncertain = result?.is_uncertain;
 
   return (
     <div style={{
@@ -253,7 +299,6 @@ export default function App() {
           marginBottom: "24px",
           boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
         }}>
-          {/* Mode Selector */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
             {MODES.map(m => (
               <button
@@ -277,7 +322,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Textarea */}
           <textarea
             value={question}
             onChange={e => setQuestion(e.target.value)}
@@ -336,7 +380,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Error */}
+        {/* Connection Error */}
         {error && (
           <div style={{
             background: "#fef2f2",
@@ -351,125 +395,156 @@ export default function App() {
             ⚠️ {error}
           </div>
         )}
-        {/* Domain validation rejection */}
-{result?.error && result?.status !== "out_of_scope" && (
-  <div style={{
-    background: "#fef2f2",
-    border: "1px solid #fca5a5",
-    borderRadius: "8px",
-    padding: "20px",
-    marginBottom: "24px"
-  }}>
-    <div style={{ color: "#dc2626", marginBottom: "8px", fontFamily: "'Courier New', monospace", fontSize: "11px", letterSpacing: "2px", fontWeight: "700" }}>
-      ❌ NOT DATABASE RELATED
-    </div>
-    <div style={{ color: "#374151", fontSize: "14px" }}>{result.error}</div>
-    <div style={{ color: "#6b7280", fontSize: "12px", marginTop: "8px" }}>
-      {result.suggestion}
-    </div>
-  </div>
-)}
-        {result?.status === "out_of_scope" && (
-  <div style={{
-    background: "#fffbeb",
-    border: "1px solid #fcd34d",
-    borderRadius: "8px",
-    padding: "20px",
-    marginBottom: "24px"
-  }}>
-    <div style={{ color: "#d97706", marginBottom: "8px", fontFamily: "'Courier New', monospace", fontSize: "11px", letterSpacing: "2px", fontWeight: "700" }}>
-      🔍 NEED MORE DETAILS
-    </div>
-    <div style={{ color: "#374151", fontSize: "14px", marginBottom: "16px" }}>
-      Your question is too general for me to find a specific match. Try being more specific:
-    </div>
-    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-      {[
-        "Why is SELECT * FROM policy_data WHERE status = 'ACTIVE' slow?",
-        "My JSON query using JSON_EXTRACT is taking 25 seconds",
-        "Query suddenly spiked from 1s to 50s with no code changes",
-        "SELECT * FROM large_table with no WHERE clause is very slow"
-      ].map((suggestion, i) => (
-        <div
-          key={i}
-          onClick={() => setQuestion(suggestion)}
-          style={{
-            background: "#ffffff",
-            border: "1px solid #fcd34d",
-            borderRadius: "6px",
-            padding: "10px 14px",
-            fontSize: "13px",
-            color: "#374151",
-            cursor: "pointer",
-            fontFamily: "'Courier New', monospace",
-            transition: "all 0.2s"
-          }}
-          onMouseEnter={e => e.target.style.background = "#fef9c3"}
-          onMouseLeave={e => e.target.style.background = "#ffffff"}
-        >
-          → {suggestion}
-        </div>
-      ))}
-    </div>
-    <div style={{ color: "#9ca3af", fontSize: "11px", marginTop: "12px" }}>
-      Click any suggestion to use it as your query
-    </div>
-  </div>
-)}
 
-        {/* Results */}
+        {/* Not DB related */}
+        {result?.error && !result?.status && (
+          <div style={{
+            background: "#fef2f2",
+            border: "1px solid #fca5a5",
+            borderRadius: "8px",
+            padding: "20px",
+            marginBottom: "24px"
+          }}>
+            <div style={{ color: "#dc2626", marginBottom: "8px", fontFamily: "'Courier New', monospace", fontSize: "11px", letterSpacing: "2px", fontWeight: "700" }}>
+              ❌ NOT DATABASE RELATED
+            </div>
+            <div style={{ color: "#374151", fontSize: "14px", marginBottom: "4px" }}>{result.error}</div>
+            <div style={{ color: "#6b7280", fontSize: "13px" }}>{result.suggestion}</div>
+          </div>
+        )}
+
+        {/* Out of scope — needs more details */}
+        {result?.status === "out_of_scope" && (
+          <div style={{
+            background: "#fffbeb",
+            border: "1px solid #fcd34d",
+            borderRadius: "8px",
+            padding: "20px",
+            marginBottom: "24px"
+          }}>
+            <div style={{ color: "#d97706", marginBottom: "8px", fontFamily: "'Courier New', monospace", fontSize: "11px", letterSpacing: "2px", fontWeight: "700" }}>
+              🔍 NEED MORE DETAILS
+            </div>
+            <div style={{ color: "#374151", fontSize: "14px", marginBottom: "16px" }}>
+              Your question is too general. {loadingSuggestions ? "Finding similar examples..." : "Try one of these:"}
+            </div>
+            {loadingSuggestions ? (
+              <div style={{ color: "#d97706", fontFamily: "'Courier New', monospace", fontSize: "13px" }}>
+                ⏳ Generating personalized suggestions...
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {dynamicSuggestions.map((s, i) => (
+                  <div
+                    key={i}
+                    onClick={() => setQuestion(s)}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #fcd34d",
+                      borderRadius: "6px",
+                      padding: "10px 14px",
+                      fontSize: "13px",
+                      color: "#374151",
+                      cursor: "pointer",
+                      fontFamily: "'Courier New', monospace",
+                      transition: "background 0.2s"
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#fef9c3"}
+                    onMouseLeave={e => e.currentTarget.style.background = "#ffffff"}
+                  >
+                    → {s}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ color: "#9ca3af", fontSize: "11px", marginTop: "12px" }}>
+              Click any suggestion to use it
+            </div>
+          </div>
+        )}
+
+        {/* Success Results */}
         {result?.status === "success" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
-            {/* Summary Banner */}
-            <div style={{
-              background: "#f0fdf4",
-              border: "1px solid #86efac",
-              borderRadius: "8px",
-              padding: "16px 20px",
-              display: "flex",
-              alignItems: "center",
-              gap: "14px"
-            }}>
-              <div style={{ fontSize: "24px" }}>
-                {mode === "technical" ? "⚙️" : mode === "simple" ? "👤" : "💼"}
-              </div>
-              <div>
-                <div style={{ color: "#16a34a", fontSize: "10px", letterSpacing: "2px", fontFamily: "'Courier New', monospace", marginBottom: "4px", fontWeight: "700" }}>
-                  {mode.toUpperCase()} SUMMARY
+            {/* Low confidence warning */}
+            {isUncertain && (
+              <div style={{
+                background: "#fffbeb",
+                border: "1px solid #fcd34d",
+                borderRadius: "8px",
+                padding: "16px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px"
+              }}>
+                <div style={{ color: "#d97706", fontFamily: "'Courier New', monospace", fontSize: "11px", letterSpacing: "2px", fontWeight: "700" }}>
+                  ⚠️ LOW CONFIDENCE MATCH
                 </div>
-                <div style={{ color: "#111827", fontSize: "15px", lineHeight: "1.5", fontWeight: "500" }}>
-                  {result.audience_summary}
+                <div style={{ color: "#374151", fontSize: "14px" }}>
+                  I found a possible match but I'm not confident enough to execute fixes safely.
+                  The diagnosis below is my best guess — please verify before acting on it.
                 </div>
+                {loadingSuggestions ? (
+                  <div style={{ color: "#d97706", fontFamily: "'Courier New', monospace", fontSize: "13px" }}>
+                    ⏳ Generating personalized suggestions...
+                  </div>
+                ) : dynamicSuggestions.length > 0 && (
+                  <div>
+                    <div style={{ color: "#6b7280", fontSize: "12px", marginBottom: "8px", fontFamily: "'Courier New', monospace" }}>
+                      DID YOU MEAN ONE OF THESE?
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {dynamicSuggestions.map((s, i) => (
+                        <div
+                          key={i}
+                          onClick={() => setQuestion(s)}
+                          style={{
+                            background: "#ffffff",
+                            border: "1px solid #fcd34d",
+                            borderRadius: "6px",
+                            padding: "8px 14px",
+                            fontSize: "13px",
+                            color: "#374151",
+                            cursor: "pointer",
+                            fontFamily: "'Courier New', monospace",
+                            transition: "background 0.2s"
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = "#fef9c3"}
+                          onMouseLeave={e => e.currentTarget.style.background = "#ffffff"}
+                        >
+                          → {s}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Reasoning Chain */}
-            {visibleSteps.length > 0 && <ReasoningChain steps={visibleSteps} />}
-
-            {/* Three Agent Cards */}
+            {/* Three Agent Cards — FIRST */}
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
 
-              {/* DiagnosisAgent */}
-              <AgentCard title="DIAGNOSISAGENT" icon="🔬" color="#3b82f6">
-                <Field label="PROBLEM" value={result.diagnosis?.problem} highlight="#1d4ed8" />
-                <Field label="ROOT CAUSE" value={result.diagnosis?.root_cause} />
-                <Field label="PATTERN MATCHED" value={result.diagnosis?.pattern_matched} />
-                <div style={{ marginBottom: "12px" }}>
-                  <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "6px", fontWeight: "600" }}>
+              {/* DiagnosisAgent — What's Wrong? */}
+              <AgentCard title="DIAGNOSISAGENT" subtitle="🔬 What's Wrong?" color="#3b82f6">
+                <Field label="Problem" value={result.diagnosis?.problem} highlight="#1d4ed8" />
+                <Field label="Root Cause" value={result.diagnosis?.root_cause} />
+                <Field label="Pattern Matched" value={result.diagnosis?.pattern_matched} />
+                <div style={{ marginBottom: "14px" }}>
+                  <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "6px", fontWeight: "700" }}>
                     CONFIDENCE
                   </div>
                   <ConfidenceDots level={result.diagnosis?.confidence} />
                 </div>
-                <Field label="SIMILARITY SCORE" value={result.diagnosis?.similarity_score?.toFixed(4)} />
-                <div style={{ marginTop: "12px" }}>
-                  <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "6px", fontWeight: "600" }}>
+                <Field label="Similarity Score" value={result.diagnosis?.similarity_score?.toFixed(4)} />
+                <div style={{ marginTop: "14px" }}>
+                  <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "8px", fontWeight: "700" }}>
                     MATCHED CASES
                   </div>
                   {result.diagnosis?.matched_cases?.map((c, i) => (
                     <div key={i} style={{
                       color: "#3b82f6",
-                      fontSize: "12px",
+                      fontSize: "13px",
                       fontFamily: "'Courier New', monospace",
                       marginBottom: "4px",
                       fontWeight: "500"
@@ -480,72 +555,110 @@ export default function App() {
                 </div>
               </AgentCard>
 
-              {/* FixAgent */}
-              <AgentCard title="FIXAGENT" icon="🔧" color="#16a34a">
-                <div style={{ marginBottom: "12px" }}>
-                  <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "6px", fontWeight: "600" }}>
-                    SQL EXECUTED
-                  </div>
+              {/* FixAgent — How to Fix? */}
+              <AgentCard
+                title="FIXAGENT"
+                subtitle={isUncertain ? "🔧 Fix Skipped" : "🔧 How to Fix?"}
+                color={isUncertain ? "#d97706" : "#16a34a"}
+              >
+                {isUncertain ? (
                   <div style={{
-                    background: "#1a1a2e",
-                    borderRadius: "6px",
-                    padding: "12px",
-                    fontFamily: "'Courier New', monospace",
-                    fontSize: "12px",
-                    color: "#4ade80",
-                    fontWeight: "600"
+                    background: "#fffbeb",
+                    border: "1px solid #fcd34d",
+                    borderRadius: "8px",
+                    padding: "16px",
+                    color: "#92400e",
+                    fontSize: "14px",
+                    lineHeight: "1.6"
                   }}>
-                    {result.fix?.sql_executed || "No fix generated"}
+                    ⚠️ Fix execution was skipped because the RAG confidence is too low.
+                    Executing an uncertain fix could make things worse.
+                    Please provide a more specific query to enable safe fix execution.
                   </div>
-                </div>
-                <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
-                  {result.fix?.safe && <StatusBadge text="✓ SAFE" color="#16a34a" />}
-                  {result.fix?.validated_by && <StatusBadge text="✓ VALIDATED" color="#16a34a" />}
-                  {result.fix?.already_existed && <StatusBadge text="ALREADY APPLIED" color="#d97706" />}
-                </div>
-                <Field label="ACTION TAKEN" value={result.fix?.action_taken} />
-                <Field label="QUERY BENCHMARKED" value={result.fix?.query_benchmarked} />
-                <div style={{ display: "flex", gap: "24px", marginTop: "16px" }}>
-                  <div>
-                    <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "4px", fontWeight: "600" }}>BEFORE</div>
-                    <div style={{ color: "#dc2626", fontSize: "22px", fontWeight: "800", fontFamily: "'Courier New', monospace" }}>
-                      {result.fix?.before_ms}ms
-                    </div>
-                  </div>
-                  {result.fix?.after_ms && (
-                    <>
-                      <div style={{ color: "#9ca3af", fontSize: "22px", alignSelf: "flex-end", marginBottom: "2px" }}>→</div>
-                      <div>
-                        <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "4px", fontWeight: "600" }}>AFTER</div>
-                        <div style={{ color: "#16a34a", fontSize: "22px", fontWeight: "800", fontFamily: "'Courier New', monospace" }}>
-                          {result.fix?.after_ms}ms
-                        </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: "14px" }}>
+                      <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "6px", fontWeight: "700" }}>
+                        SQL EXECUTED
                       </div>
-                    </>
-                  )}
-                </div>
-                {result.fix?.improvement && (
-                  <div style={{
-                    marginTop: "12px",
-                    color: "#16a34a",
-                    fontSize: "13px",
-                    fontFamily: "'Courier New', monospace",
-                    fontWeight: "700"
-                  }}>
-                    ↑ {result.fix.improvement}
-                  </div>
+                      <div style={{
+                        background: "#1a1a2e",
+                        borderRadius: "6px",
+                        padding: "12px",
+                        fontFamily: "'Courier New', monospace",
+                        fontSize: "12px",
+                        color: "#4ade80",
+                        fontWeight: "600"
+                      }}>
+                        {result.fix?.sql_executed || "No fix generated"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
+                      {result.fix?.safe && <StatusBadge text="✓ SAFE" color="#16a34a" />}
+                      {result.fix?.validated_by && <StatusBadge text="✓ VALIDATED" color="#16a34a" />}
+                      {result.fix?.already_existed && <StatusBadge text="ALREADY APPLIED" color="#d97706" />}
+                    </div>
+                    <Field label="Action Taken" value={result.fix?.action_taken} />
+                    <Field label="Query Benchmarked" value={result.fix?.query_benchmarked} />
+                    <div style={{ display: "flex", gap: "24px", marginTop: "16px" }}>
+                      {result.fix?.before_ms && (
+                        <div>
+                          <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "4px", fontWeight: "700" }}>BEFORE</div>
+                          <div style={{ color: "#dc2626", fontSize: "22px", fontWeight: "800", fontFamily: "'Courier New', monospace" }}>
+                            {result.fix.before_ms}ms
+                          </div>
+                        </div>
+                      )}
+                      {result.fix?.after_ms && (
+                        <>
+                          <div style={{ color: "#9ca3af", fontSize: "22px", alignSelf: "flex-end", marginBottom: "2px" }}>→</div>
+                          <div>
+                            <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "4px", fontWeight: "700" }}>AFTER</div>
+                            <div style={{ color: "#16a34a", fontSize: "22px", fontWeight: "800", fontFamily: "'Courier New', monospace" }}>
+                              {result.fix.after_ms}ms
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {result.fix?.improvement && (
+                      <div style={{
+                        marginTop: "12px",
+                        color: "#16a34a",
+                        fontSize: "14px",
+                        fontFamily: "'Courier New', monospace",
+                        fontWeight: "700"
+                      }}>
+                        ↑ {result.fix.improvement}
+                      </div>
+                    )}
+                  </>
                 )}
               </AgentCard>
 
-              {/* ImpactAgent */}
-              <AgentCard title="IMPACTAGENT" icon="📊" color="#dc2626">
-                <Field label="TECHNICAL" value={result.impact?.technical} />
-                <Field label="USER FACING" value={result.impact?.user_facing} />
-                <Field label="EXECUTIVE" value={result.impact?.executive} />
-                <Field label="DAILY COST" value={result.impact?.estimated_daily_cost} highlight="#d97706" />
-                <Field label="TRAJECTORY" value={result.impact?.trajectory} highlight="#dc2626" />
-                <div style={{ marginBottom: "12px" }}>
-                  <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "6px", fontWeight: "600" }}>
+              {/* ImpactAgent — What's the Impact? */}
+              <AgentCard title="IMPACTAGENT" subtitle="📊 What's the Impact?" color="#dc2626">
+              {isUncertain && (
+                  <div style={{
+                    background: "#fffbeb",
+                    border: "1px solid #fcd34d",
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "14px",
+                    color: "#92400e",
+                    fontSize: "12px",
+                    fontFamily: "'Courier New', monospace"
+                  }}>
+                    ⚠️ Impact estimated from closest match — may not be accurate. Verify with a more specific query.
+                  </div>
+                )}
+                <Field label="Technical Impact" value={result.impact?.technical} />
+                <Field label="User Impact" value={result.impact?.user_facing} />
+                <Field label="Business Impact" value={result.impact?.executive} />
+                <Field label="Daily Cost" value={result.impact?.estimated_daily_cost} highlight="#d97706" />
+                <Field label="Trajectory" value={result.impact?.trajectory} highlight="#dc2626" />
+                <div style={{ marginBottom: "14px" }}>
+                  <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "8px", fontWeight: "700" }}>
                     URGENCY
                   </div>
                   <StatusBadge
@@ -556,9 +669,13 @@ export default function App() {
                     }
                   />
                 </div>
-                <Field label="FIX ROI" value={result.impact?.fix_roi} highlight="#16a34a" />
+                <Field label="Fix ROI" value={result.impact?.fix_roi} highlight="#16a34a" />
               </AgentCard>
             </div>
+
+            {/* Reasoning Chain — AFTER cards */}
+            {visibleSteps.length > 0 && <ReasoningChain steps={visibleSteps} />}
+
           </div>
         )}
 

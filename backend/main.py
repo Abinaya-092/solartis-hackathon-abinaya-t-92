@@ -449,7 +449,50 @@ def analyze_full(request: FullAnalysisRequest):
         return result
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))  
+        raise HTTPException(status_code=500, detail=str(e)) 
+    
+     
+@app.post("/suggest/similar")
+def suggest_similar(request: AskRequest):
+    try:
+        llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.3)
+        prompt = ChatPromptTemplate.from_template("""
+You are a database performance expert. A user described a vague database issue.
+Generate 4 specific example queries they might actually mean.
+
+IMPORTANT: Your suggestions must be related to these known performance patterns:
+- Full table scan (SELECT * with no WHERE clause)
+- JSON field filtering (JSON_EXTRACT in WHERE clause)
+- High frequency config queries (repeated lookups with no cache)
+- Complex joins with JSON processing
+- Anomaly / sudden latency spike
+- Nested subqueries (WHERE IN subquery)
+- Aggregation with multiple joins
+- Large logging table queries
+- Bulk update performance
+- Missing index on filtered column
+
+User said: "{question}"
+
+Generate 4 suggestions that are:
+1. Related to what the user described
+2. Matching one of the known patterns above
+3. Specific and actionable
+
+Return ONLY a JSON array of 4 strings. No markdown, no explanation.
+""")
+        chain = prompt | llm
+        raw = chain.invoke({"question": request.question}).content.strip()
+        raw = re.sub(r"```json|```", "", raw).strip()
+        suggestions = json.loads(raw)
+        return {"suggestions": suggestions[:4]}
+    except Exception as e:
+        return {"suggestions": [
+            "Why is SELECT * FROM policy_data WHERE status = 'ACTIVE' slow?",
+            "My JSON query using JSON_EXTRACT is taking 25 seconds",
+            "Query suddenly spiked from 1s to 50s with no code changes",
+            "SELECT * FROM large_table with no WHERE clause is very slow"
+        ]}
 
 # ── Health check ──────────────────────────────────────────────────
 @app.get("/")
@@ -462,6 +505,7 @@ def root():
             "/suggest/optimization",
             "/ask",
             "/analyze/and/fix",
-            "/analyze/full"
+            "/analyze/full",
+            "/suggest/similar"
         ]
     }

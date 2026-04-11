@@ -3,8 +3,8 @@ import re
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from rag import search_cases_with_confidence
-from agent import SQLPerformanceAgent
 from executor import generate_fix_sql, apply_fix, measure_query, generate_benchmark_query
+
 
 # ── The three specialist agents ───────────────────────────────────
 
@@ -18,7 +18,7 @@ class DiagnosisAgent:
         self.prompt = ChatPromptTemplate.from_template("""
 You are a Database Reliability Engineer specializing in ROOT CAUSE ANALYSIS.
 Your ONLY job is to diagnose WHY a query is slow.
-Return ONLY a JSON object.
+Return ONLY a JSON object. No markdown, no explanation.
 
 RETRIEVED CASES:
 {context}
@@ -69,18 +69,18 @@ class FixAgent:
             return {
                 "fix_sql": None,
                 "safe": False,
-                "action_taken": "No safe fix could be generated",
+                "action_taken": "No safe fix could be generated for this pattern",
                 "query_benchmarked": query,
                 "before_ms": before["execution_ms"],
                 "after_ms": before["execution_ms"],
-                "improvement": "no fix available"
+                "improvement": "no fix available",
+                "already_existed": False
             }
-        
+
         # Apply fix
         fix_result = apply_fix(fix_sql)
 
         # If fix already existed — skip after measurement
-        # timing variance is meaningless when nothing changed
         if fix_result.get("already_existed"):
             return {
                 "fix_sql": fix_sql,
@@ -116,7 +116,12 @@ class FixAgent:
             "improvement": improvement
         }
 
+
 class ImpactAgent:
+    """
+    Specialist: WHAT does this cost the business?
+    Calculates technical, human, and executive impact.
+    """
     def __init__(self):
         self.llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
         self.prompt = ChatPromptTemplate.from_template("""
@@ -146,13 +151,11 @@ Return ONLY this exact JSON with no extra text:
             "execution_time": execution_time_ms
         }).content.strip()
         raw = re.sub(r"```json|```", "", raw).strip()
-
-        # Find JSON object — extract only the first { } block
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         if match:
             raw = match.group(0)
-
         return json.loads(raw)
+
 
 # ── The Supervisor — orchestrates all three agents ─────────────────
 
@@ -168,7 +171,11 @@ class SupervisorAgent:
 
     def run(self, question: str, mode: str = "technical") -> dict:
         reasoning_chain = []
-        reasoning_chain.append(f"Received query: '{question[:60]}...' " if len(question) > 60 else f"Received query: '{question}'")
+        reasoning_chain.append(
+            f"Received query: '{question[:60]}...'"
+            if len(question) > 60
+            else f"Received query: '{question}'"
+        )
 
         # ── Step 1: RAG with confidence ───────────────────────────
         reasoning_chain.append("Searching knowledge base with confidence scoring...")
@@ -185,7 +192,11 @@ class SupervisorAgent:
             }
 
         docs = search_result["docs"]
-        reasoning_chain.append(f"RAG confidence: {search_result['confidence_level'].upper()} (score: {search_result['best_score']})")
+        is_uncertain = search_result["confidence_level"] == "uncertain"
+
+        reasoning_chain.append(
+            f"RAG confidence: {search_result['confidence_level'].upper()} (score: {search_result['best_score']})"
+        )
         reasoning_chain.append(f"Top match: {docs[0].metadata['title']}")
 
         # ── Step 2: DiagnosisAgent ────────────────────────────────
@@ -204,35 +215,66 @@ class SupervisorAgent:
             }
 
         # ── Step 3: FixAgent ──────────────────────────────────────
-        reasoning_chain.append("Delegating to FixAgent...")
-        try:
-            suggestion = docs[0].metadata.get("suggestion", "")
-            fix = self.fix_agent.generate_and_apply(
-                problem=diagnosis.get("problem", ""),
-                root_cause=diagnosis.get("root_cause", ""),
-                suggestion=suggestion,
-                user_query=question
+        # Skip fix entirely if confidence is uncertain
+        if is_uncertain:
+            reasoning_chain.append(
+                "FixAgent skipped — RAG confidence UNCERTAIN. "
+                "Executing fixes on uncertain diagnosis could cause harm."
             )
-            if fix["fix_sql"]:
-                reasoning_chain.append(f"FixAgent generated safe SQL: {fix['fix_sql']}")
-                reasoning_chain.append(f"Safety validated: {fix['safe']}")
-                if fix.get("already_existed"):
-                    reasoning_chain.append(f"Before measurement: {fix['before_ms']}ms — {fix['improvement']}")
+            fix = {
+                "fix_sql": None,
+                "safe": False,
+                "action_taken": "Fix skipped — diagnosis confidence is too low. Please provide a more specific query.",
+                "improvement": "no fix attempted",
+                "already_existed": False,
+                "query_benchmarked": None,
+                "before_ms": None,
+                "after_ms": None
+            }
+        else:
+            reasoning_chain.append("Delegating to FixAgent...")
+            try:
+                suggestion = docs[0].metadata.get("suggestion", "")
+                fix = self.fix_agent.generate_and_apply(
+                    problem=diagnosis.get("problem", ""),
+                    root_cause=diagnosis.get("root_cause", ""),
+                    suggestion=suggestion,
+                    user_query=question
+                )
+                if fix["fix_sql"]:
+                    reasoning_chain.append(f"FixAgent generated safe SQL: {fix['fix_sql']}")
+                    reasoning_chain.append(f"Safety validated: {fix['safe']}")
+                    if fix.get("already_existed"):
+                        reasoning_chain.append(
+                            f"Before measurement: {fix['before_ms']}ms — {fix['improvement']}"
+                        )
+                    else:
+                        reasoning_chain.append(
+                            f"Performance: {fix['before_ms']}ms → {fix['after_ms']}ms ({fix['improvement']})"
+                        )
                 else:
-                    reasoning_chain.append(f"Performance: {fix['before_ms']}ms → {fix['after_ms']}ms ({fix['improvement']})")
-            else:
-                reasoning_chain.append("FixAgent: no safe fix available for this pattern")
-        except Exception as e:
-            reasoning_chain.append(f"FixAgent failed: {str(e)}")
-            fix = {"fix_sql": None, "safe": False, "action_taken": str(e), "improvement": "unknown"}
+                    reasoning_chain.append("FixAgent: no safe fix available for this pattern")
+            except Exception as e:
+                reasoning_chain.append(f"FixAgent failed: {str(e)}")
+                fix = {
+                    "fix_sql": None,
+                    "safe": False,
+                    "action_taken": str(e),
+                    "improvement": "unknown",
+                    "already_existed": False,
+                    "query_benchmarked": None,
+                    "before_ms": None,
+                    "after_ms": None
+                }
 
         # ── Step 4: ImpactAgent ───────────────────────────────────
         reasoning_chain.append("Delegating to ImpactAgent...")
         try:
+            execution_time = fix.get("before_ms") or 0
             impact = self.impact_agent.calculate(
                 problem=diagnosis.get("problem", ""),
                 root_cause=diagnosis.get("root_cause", ""),
-                execution_time_ms=fix.get("before_ms", 0)
+                execution_time_ms=execution_time
             )
             reasoning_chain.append(f"ImpactAgent: urgency={impact.get('urgency', 'unknown')}")
         except Exception as e:
@@ -243,7 +285,7 @@ class SupervisorAgent:
         reasoning_chain.append("Supervisor assembling final response...")
         reasoning_chain.append(f"Response mode: {mode}")
 
-        # Build mode-aware impact summary
+        # Audience summary based on mode
         if mode == "simple":
             audience_summary = impact.get("user_impact", "Performance issue detected.")
         elif mode == "executive":
@@ -256,6 +298,7 @@ class SupervisorAgent:
         return {
             "status": "success",
             "mode": mode,
+            "is_uncertain": is_uncertain,
             "reasoning_chain": reasoning_chain,
 
             "diagnosis": {
@@ -275,7 +318,8 @@ class SupervisorAgent:
                 "query_benchmarked": fix.get("query_benchmarked"),
                 "before_ms": fix.get("before_ms"),
                 "after_ms": fix.get("after_ms"),
-                "improvement": fix.get("improvement")
+                "improvement": fix.get("improvement"),
+                "skipped": is_uncertain
             },
 
             "impact": {

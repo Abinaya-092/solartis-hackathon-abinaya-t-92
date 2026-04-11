@@ -244,7 +244,7 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 🧪 Test Examples
+##  Test Examples
 
 Once the system is running, try these queries in the frontend:
 
@@ -292,8 +292,6 @@ our database queries are slow and affecting customers
 ```
 > Try this in Technical, Simple, and Executive modes to see audience-aware responses.
 
-### Direct API Testing
-Open `http://localhost:8000/docs` for interactive API documentation.
 
 ### Direct API Testing
 Open `http://localhost:8000/docs` for interactive API documentation.

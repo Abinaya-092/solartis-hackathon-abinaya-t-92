@@ -638,7 +638,7 @@ export default function App() {
 
               {/* ImpactAgent — What's the Impact? */}
               <AgentCard title="IMPACTAGENT" subtitle="📊 What's the Impact?" color="#dc2626">
-              {isUncertain && (
+                                {isUncertain && (
                   <div style={{
                     background: "#fffbeb",
                     border: "1px solid #fcd34d",
@@ -652,10 +652,9 @@ export default function App() {
                     ⚠️ Impact estimated from closest match — may not be accurate. Verify with a more specific query.
                   </div>
                 )}
-                <Field label="Technical Impact" value={result.impact?.technical} />
-                <Field label="User Impact" value={result.impact?.user_facing} />
-                <Field label="Business Impact" value={result.impact?.executive} />
-                <Field label="Daily Cost" value={result.impact?.estimated_daily_cost} highlight="#d97706" />
+<Field label="Technical Impact" value={result.impact?.technical} highlight={mode === "technical" ? "#1d4ed8" : null} />
+<Field label="User Impact" value={result.impact?.user_facing} highlight={mode === "simple" ? "#16a34a" : null} />
+<Field label="Business Impact" value={result.impact?.executive} highlight={mode === "executive" ? "#dc2626" : null} /><Field label="Daily Cost" value={result.impact?.estimated_daily_cost} highlight="#d97706" />
                 <Field label="Trajectory" value={result.impact?.trajectory} highlight="#dc2626" />
                 <div style={{ marginBottom: "14px" }}>
                   <div style={{ color: "#6b7280", fontSize: "10px", letterSpacing: "1px", fontFamily: "'Courier New', monospace", marginBottom: "8px", fontWeight: "700" }}>
@@ -672,7 +671,31 @@ export default function App() {
                 <Field label="Fix ROI" value={result.impact?.fix_roi} highlight="#16a34a" />
               </AgentCard>
             </div>
+{/* Mode Summary */}
+<div style={{
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "12px 16px",
+  background: "#f0fdf4",
+  border: "1px solid #86efac",
+  borderRadius: "8px",
+  fontSize: "14px",
+  color: "#111827",
+  fontWeight: "500"
+}}>
+  <span style={{ fontSize: "18px" }}>
+    {mode === "technical" ? "⚙️" : mode === "simple" ? "👤" : "💼"}
+  </span>
+  <div>
+    <span style={{ color: "#16a34a", fontFamily: "'Courier New', monospace", fontSize: "11px", fontWeight: "700", letterSpacing: "1px" }}>
+      {mode.toUpperCase()} MODE — AUDIENCE SUMMARY
+    </span>
+    <div style={{ marginTop: "2px" }}>{result.audience_summary}</div>
+  </div>
+</div>
 
+{/* Reasoning Chain — AFTER cards */}
             {/* Reasoning Chain — AFTER cards */}
             {visibleSteps.length > 0 && <ReasoningChain steps={visibleSteps} />}
 

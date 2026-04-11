@@ -8,9 +8,9 @@
 
 ---
 
-## 🎯 Problem Understanding
+## Problem Understanding
 
-Insurance platforms like Solartis process millions of policy transactions daily. A single slow SQL query isn't just a performance issue — it's a financial leak. 
+In any data-intensive system, database performance is mission-critical. A single slow SQL query can cascade into system-wide degradation — affecting real users, real operations, and real revenue. A single slow SQL query isn't just a performance issue — it's a financial leak! 
 
 **The core challenge:**
 - Junior developers and support engineers lack the expertise to diagnose database performance issues that senior DBAs resolve intuitively
@@ -21,8 +21,7 @@ Insurance platforms like Solartis process millions of policy transactions daily.
 
 ---
 
-## 🏗️ Architecture
-## 🏗️ Architecture
+##  Architecture
 
 ```mermaid
 flowchart TD
@@ -62,7 +61,7 @@ flowchart TD
 ```
 ---
 
-## ✨ Key Features
+##  Key Features
 
 ### 1. Multi-Agent Supervisor Architecture
 Three specialist agents orchestrated by a Supervisor — each with a single responsibility. The system returns a full **reasoning chain** showing every decision made, ensuring complete auditability — critical in regulated insurance environments.
@@ -92,11 +91,10 @@ Same diagnosis, three different explanations:
 - **Executive:** "Business incurs significant productivity losses — urgency: HIGH"
 
 ### 6. Enriched Knowledge Base
-11 SQL performance cases enriched with real-world symptoms, detection signals, fix validation steps, and Solartis-specific insurance context — enabling semantic matching on natural language descriptions, not just keywords.
-
+11 SQL performance cases enriched with real-world symptoms, detection signals, fix validation steps, and domain-specific context — enabling semantic matching on natural language descriptions, not just keywords.
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 | Component | Technology |
 |---|---|
@@ -109,11 +107,13 @@ Same diagnosis, three different explanations:
 | Frontend | React + Vite |
 
 ---
+##  Project Structure
 
-## 📁 Project Structure
+```
 HACKATHON/
 ├── dataset.json          # Enriched knowledge base (11 cases)
 ├── README.md
+├── test_all.py           # Full automated test suite
 ├── backend/
 │   ├── main.py           # FastAPI — 6 endpoints
 │   ├── supervisor.py     # Multi-agent orchestrator
@@ -121,14 +121,15 @@ HACKATHON/
 │   ├── executor.py       # FixAgent — LLM SQL + safety validator
 │   ├── rag.py            # RAG layer with confidence scoring
 │   ├── database.py       # SQLite schema + 1.7M row seeder
+│   ├── database.db       # SQLite database (auto-generated)
 │   └── .env              # GROQ_API_KEY (not committed)
 └── frontend/
-└── src/
-└── App.jsx       # React dashboard
+    ├── src/
+    │   └── App.jsx       # React dashboard
+    └── package.json
+```
 
----
-
-## 🚀 How to Run
+##  How to Run
 
 ### Prerequisites
 - Python 3.10+
@@ -172,7 +173,7 @@ Subsequent runs start in seconds.
 
 ---
 
-## 🔌 API Endpoints
+##  API Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -231,7 +232,7 @@ POST /analyze/full
 
 ---
 
-## 🎨 Design Decisions & Trade-offs
+##  Design Decisions & Trade-offs
 
 ### Why SQLite over MySQL/PostgreSQL?
 SQLite requires zero installation — evaluators can run the system with a single command. In production, the system would connect to managed PostgreSQL (Supabase/RDS) with connection pooling. The agentic fix loop works identically regardless of the database backend.
@@ -244,14 +245,14 @@ I evaluated four advanced RAG strategies:
 - **HyDE** — rejected. At 11 cases, retrieval precision is already high. Would reconsider at 1000+ cases.
 - **Reranking** — rejected. LLM reranking doesn't scale; production would need Cohere Rerank.
 - **Multi-query retrieval** — rejected. Triples search cost with marginal benefit at small scale.
-- **Similarity threshold** ✅ implemented. Zero cost, scales perfectly, prevents hallucination on edge cases.
+- **Similarity threshold** -**implemented**. Zero cost, scales perfectly, prevents hallucination on edge cases.
 
 ### Why three separate agents instead of one LLM call?
 Single responsibility principle. Each agent has one job, one system prompt, one output schema. This makes the system debuggable, testable, and extensible. Adding a new agent (e.g., a PredictionAgent for future trajectory) requires zero changes to existing agents.
 
 ---
 
-## 🚀 Production Scaling Considerations
+##  Production Scaling Considerations
 
 *Answering the mandatory question: "If you were designing this system for production at scale, what would you change or improve?"*
 
@@ -278,7 +279,7 @@ Current safety validator whitelists `CREATE INDEX`, `ANALYZE`, `VACUUM`. Product
 
 ---
 
-## 🤖 AI Usage Disclosure
+##  AI Usage Disclosure
 
 As required by the challenge guidelines:
 
@@ -311,7 +312,7 @@ As required by the challenge guidelines:
 
 ---
 
-## 📊 Dataset
+##  Dataset
 
 11 SQL performance cases covering:
 - Full table scans

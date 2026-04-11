@@ -1,0 +1,758 @@
+======================================================================
+  SOLARTIS AI SYSTEM — FULL DETAILED TEST SUITE
+======================================================================
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C1-1 Status query
+  ENDPOINT: /analyze/full
+  INPUT: {'question': "SELECT * FROM policy_data WHERE status = 'ACTIVE' is slow", 'mode': 'technical'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'SELECT * FROM policy_data WHERE status = 'ACTIVE' is slow'
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: CONFIDENT (score: 0.7777)
+    > Top match: Missing Index on Frequently Filtered Column
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: Missing Index on Frequently Filtered Column
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: CREATE INDEX idx_status ON policy_data(status)
+    > Safety validated: True
+    > Before measurement: 886.01ms — fix already applied — no measurement needed
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=high — impacts all users on every query
+    > Supervisor assembling final response...
+    > Response mode: technical
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    Missing Index on Frequently Filtered Column 
+  Root Cause:
+    No index on the status column forces a full table scan on every 
+    query. The database reads every single row to find matching 
+    records even though only a fraction match the condition. 
+  Pattern Matched:
+    Case: Missing Index on Frequently Filtered Column 
+  Confidence:
+    high 
+  Similarity Score:
+    0.7777 
+  Matched Cases:
+    → Missing Index on Frequently Filtered Column
+    → Update Query Performance
+    → JSON Field Filtering
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    CREATE INDEX idx_status ON policy_data(status) 
+  Safe:
+    True 
+  Action Taken:
+    Index already exists — skipped 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE status = 'ACTIVE' 
+  Before MS:
+    886.01 
+  Improvement:
+    fix already applied — no measurement needed 
+
+  📊 IMPACTAGENT:
+  Technical:
+    A full table scan occurs on every query due to the missing index 
+    on the status column. 
+  User Facing:
+    Users experience slow query performance and increased wait 
+    times. 
+  Executive:
+    The business incurs significant productivity losses and 
+    increased risk of data inconsistencies. 
+  Daily Cost:
+    4.5 hours 
+  Trajectory:
+    Gets worse over time as data grows. 
+  Urgency:
+    high — impacts all users on every query 
+  Fix ROI:
+    fixing saves significant daily productivity 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    A full table scan occurs on every query due to the missing index 
+    on the status column. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C1-2 JSON query
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'my JSON query using JSON_EXTRACT is taking 25 seconds', 'mode': 'technical'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'my JSON query using JSON_EXTRACT is taking 25 seconds'
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: CONFIDENT (score: 0.8967)
+    > Top match: JSON Field Filtering
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: JSON Field Filtering
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: CREATE INDEX idx_policy_state ON policy_data(policy_state)
+    > Safety validated: True
+    > Performance: 596.72ms → 595.6ms (0.2% faster)
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=High — impacts all users on every query, requiring immediate attention.
+    > Supervisor assembling final response...
+    > Response mode: technical
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    JSON Field Filtering 
+  Root Cause:
+    JSON_EXTRACT() is a function call on a column. MySQL cannot use 
+    a regular B-tree index on a function result. So even if 
+    policy_data has an index on the data column, it is bypassed 
+    entirely. Every row is read and the JSON is parsed in memory to 
+    evaluate the condition. 
+  Pattern Matched:
+    Unindexed JSON extraction in WHERE clause causes full table scan 
+  Confidence:
+    high 
+  Similarity Score:
+    0.8967 
+  Matched Cases:
+    → JSON Field Filtering
+    → Complex Join with JSON Processing
+    → Knowledge Base Config Lookup
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    CREATE INDEX idx_policy_state ON policy_data(policy_state) 
+  Safe:
+    True 
+  Action Taken:
+    Fix failed: no such column: policy_state 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE status = 'ACTIVE' 
+  Before MS:
+    596.72 
+  After MS:
+    595.6 
+  Improvement:
+    0.2% faster 
+
+  📊 IMPACTAGENT:
+  Technical:
+    MySQL cannot use a regular B-tree index on a function result, 
+    causing a full table scan. 
+  User Facing:
+    Users experience slow query execution times, impacting 
+    productivity. 
+  Executive:
+    Business cost: increased query execution times, risk: potential 
+    data inconsistencies due to slow queries. 
+  Daily Cost:
+    Estimated 596.72ms query execution time translates to 
+    approximately 0.59672 hours or 35.73 minutes lost per day. 
+  Trajectory:
+    This issue will get worse over time as data grows, leading to 
+    increased query execution times. 
+  Urgency:
+    High — impacts all users on every query, requiring immediate 
+    attention. 
+  Fix ROI:
+    Fixing this issue will save significant daily productivity, 
+    resulting in a high return on investment. 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    MySQL cannot use a regular B-tree index on a function result, 
+    causing a full table scan. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C1-3 Policy search simple
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'policy search is very slow today', 'mode': 'simple'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'policy search is very slow today'
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: CONFIDENT (score: 0.9836)
+    > Top match: Missing Index on Frequently Filtered Column
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: Missing Index on Frequently Filtered Column
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: CREATE INDEX idx_status ON policy_data(status)
+    > Safety validated: True
+    > Before measurement: 588.49ms — fix already applied — no measurement needed
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=high — impacts all users on every query
+    > Supervisor assembling final response...
+    > Response mode: simple
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    Missing Index on Frequently Filtered Column 
+  Root Cause:
+    No index on the status column forces a full table scan on every 
+    query. The database reads every single row to find matching 
+    records even though only a fraction match the condition. 
+  Pattern Matched:
+    Case: Missing Index on Frequently Filtered Column 
+  Confidence:
+    high 
+  Similarity Score:
+    0.9836 
+  Matched Cases:
+    → Missing Index on Frequently Filtered Column
+    → Update Query Performance
+    → JSON Field Filtering
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    CREATE INDEX idx_status ON policy_data(status) 
+  Safe:
+    True 
+  Action Taken:
+    Index already exists — skipped 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE status = 'ACTIVE' 
+  Before MS:
+    588.49 
+  Improvement:
+    fix already applied — no measurement needed 
+
+  📊 IMPACTAGENT:
+  Technical:
+    A full table scan occurs on every query due to the missing index 
+    on the status column. 
+  User Facing:
+    Users experience slow query performance and increased wait 
+    times. 
+  Executive:
+    The business incurs significant productivity losses and 
+    increased risk of data inconsistencies. 
+  Daily Cost:
+    10-15 hours 
+  Trajectory:
+    Gets worse over time as data grows, leading to increased query 
+    times and potential system crashes. 
+  Urgency:
+    high — impacts all users on every query 
+  Fix ROI:
+    fixing saves significant daily productivity 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    Users experience slow query performance and increased wait 
+    times. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C1-4 Policy search executive
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'policy search is very slow today', 'mode': 'executive'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'policy search is very slow today'
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: CONFIDENT (score: 0.9836)
+    > Top match: Missing Index on Frequently Filtered Column
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: Missing Index on Frequently Filtered Column
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: CREATE INDEX idx_status ON policy_data(status)
+    > Safety validated: True
+    > Before measurement: 593.53ms — fix already applied — no measurement needed
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=high — impacts all users on every query
+    > Supervisor assembling final response...
+    > Response mode: executive
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    Missing Index on Frequently Filtered Column 
+  Root Cause:
+    No index on the status column forces a full table scan on every 
+    query. The database reads every single row to find matching 
+    records even though only a fraction match the condition. 
+  Pattern Matched:
+    Case: Missing Index on Frequently Filtered Column 
+  Confidence:
+    high 
+  Similarity Score:
+    0.9836 
+  Matched Cases:
+    → Missing Index on Frequently Filtered Column
+    → Update Query Performance
+    → JSON Field Filtering
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    CREATE INDEX idx_status ON policy_data(status) 
+  Safe:
+    True 
+  Action Taken:
+    Index already exists — skipped 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE status = 'ACTIVE' 
+  Before MS:
+    593.53 
+  Improvement:
+    fix already applied — no measurement needed 
+
+  📊 IMPACTAGENT:
+  Technical:
+    A full table scan occurs on every query due to the missing index 
+    on the status column. 
+  User Facing:
+    Users experience slow query performance and increased wait 
+    times. 
+  Executive:
+    The business incurs significant productivity losses and 
+    increased risk of data inconsistencies. 
+  Daily Cost:
+    10-15 hours 
+  Trajectory:
+    Gets worse over time as data grows, leading to increased query 
+    times and potential system crashes. 
+  Urgency:
+    high — impacts all users on every query 
+  Fix ROI:
+    fixing saves significant daily productivity 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    The business incurs significant productivity losses and 
+    increased risk of data inconsistencies. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C2-1 Spike anomaly
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'my query suddenly spiked from 1 second to 50 seconds with no code changes', 'mode': 'technical'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'my query suddenly spiked from 1 second to 50 seconds with no...' 
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: CONFIDENT (score: 0.7158)
+    > Top match: Anomaly - Sudden Latency Spike
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: Anomaly - Sudden Latency Spike
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: ANALYZE
+    > Safety validated: True
+    > Performance: 22.94ms → 28.26ms (marginal improvement)
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=High — impacts all users on every query.
+    > Supervisor assembling final response...
+    > Response mode: technical
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    Anomaly - Sudden Latency Spike 
+  Root Cause:
+    Sudden degradation without code changes points to infrastructure 
+    causes: table bloat from accumulated dead tuples (PostgreSQL) or 
+    fragmented pages (MySQL), lock contention from a long-running 
+    transaction blocking reads, index corruption or statistics 
+    becoming stale causing optimizer to choose wrong execution plan, 
+    or autovacuum/auto-analyze not running due to configuration 
+    issues. 
+  Pattern Matched:
+    sudden 50x latency spike on previously healthy query 
+  Confidence:
+    high 
+  Similarity Score:
+    0.7158 
+  Matched Cases:
+    → Anomaly - Sudden Latency Spike
+    → Full Table Scan
+    → Update Query Performance
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    ANALYZE 
+  Safe:
+    True 
+  Action Taken:
+    Executed: ANALYZE 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE policy_id IN (SELECT policy_id 
+    FROM claims_data WHERE claim_date BETWEEN '2022-01-01' AND 
+    '2022-12-31' AND status = 'open') 
+  Before MS:
+    22.94 
+  After MS:
+    28.26 
+  Improvement:
+    marginal improvement 
+
+  📊 IMPACTAGENT:
+  Technical:
+    Table bloat, lock contention, index corruption, or stale 
+    statistics are causing sudden latency spikes. 
+  User Facing:
+    Users experience slow query performance and increased wait 
+    times. 
+  Executive:
+    This issue poses a significant risk to business productivity and 
+    may lead to revenue loss. 
+  Daily Cost:
+    Estimated 2-5 hours of productivity lost per day. 
+  Trajectory:
+    Worsens over time as data grows and autovacuum/auto-analyze fail 
+    to run. 
+  Urgency:
+    High — impacts all users on every query. 
+  Fix ROI:
+    Fixing this issue will save significant daily productivity and 
+    revenue. 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    Table bloat, lock contention, index corruption, or stale 
+    statistics are causing sudden latency spikes. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C2-2 Slow today
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'database was fine yesterday but extremely slow today', 'mode': 'technical'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'database was fine yesterday but extremely slow today'
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: CONFIDENT (score: 1.0372)
+    > Top match: Anomaly - Sudden Latency Spike
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: Anomaly - Sudden Latency Spike
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: ANALYZE
+    > Safety validated: True
+    > Performance: 0.47ms → 0.59ms (marginal improvement)
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=high — impacts all users on every query
+    > Supervisor assembling final response...
+    > Response mode: technical
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    Anomaly - Sudden Latency Spike 
+  Root Cause:
+    Sudden degradation without code changes points to infrastructure 
+    causes: table bloat from accumulated dead tuples (PostgreSQL) or 
+    fragmented pages (MySQL), lock contention from a long-running 
+    transaction blocking reads, index corruption or statistics 
+    becoming stale causing optimizer to choose wrong execution plan, 
+    or autovacuum/auto-analyze not running due to configuration 
+    issues. 
+  Pattern Matched:
+    sudden 50x latency spike on previously healthy query 
+  Confidence:
+    high 
+  Similarity Score:
+    1.0372 
+  Matched Cases:
+    → Anomaly - Sudden Latency Spike
+    → Full Table Scan
+    → Update Query Performance
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    ANALYZE 
+  Safe:
+    True 
+  Action Taken:
+    Executed: ANALYZE 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE end_date IS NULL AND status = 
+    'active' 
+  Before MS:
+    0.47 
+  After MS:
+    0.59 
+  Improvement:
+    marginal improvement 
+
+  📊 IMPACTAGENT:
+  Technical:
+    Table bloat, lock contention, index corruption, or stale 
+    statistics are causing sudden latency spikes. 
+  User Facing:
+    Users experience slow query performance and delayed results. 
+  Executive:
+    Business suffers from reduced productivity and increased risk of 
+    data inconsistencies. 
+  Daily Cost:
+    10-20 hours 
+  Trajectory:
+    Gets worse over time as data grows and autovacuum/auto-analyze 
+    fail to run. 
+  Urgency:
+    high — impacts all users on every query 
+  Fix ROI:
+    fixing saves significant daily productivity 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    Table bloat, lock contention, index corruption, or stale 
+    statistics are causing sudden latency spikes. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C3-1 Stored procedure
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'stored procedure execution is slow', 'mode': 'technical'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'stored procedure execution is slow'
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: UNCERTAIN (score: 1.2882)
+    > Top match: Update Query Performance
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: stored procedure execution is slow
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: CREATE INDEX idx_policy_data_end_date_status ON policy_data(end_date, status)
+    > Safety validated: True
+    > Before measurement: 593.8ms — fix already applied — no measurement needed
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=High — impacts all users on every query, requiring immediate attention.
+    > Supervisor assembling final response...
+    > Response mode: technical
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    stored procedure execution is slow 
+  Root Cause:
+    Missing indexes on key columns used in the stored procedure, 
+    leading to full table scans or inefficient subqueries. 
+    Insufficient indexing can cause the database engine to read 
+    every single row in the table, resulting in slow query 
+    execution. 
+  Pattern Matched:
+    Nested Subquery, Full Table Scan 
+  Confidence:
+    high 
+  Similarity Score:
+    1.2882 
+  Matched Cases:
+    → Update Query Performance
+    → Full Table Scan
+    → Nested Subquery
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    CREATE INDEX idx_policy_data_end_date_status ON 
+    policy_data(end_date, status) 
+  Safe:
+    True 
+  Action Taken:
+    Index already exists — skipped 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE status = 'ACTIVE' 
+  Before MS:
+    593.8 
+  Improvement:
+    fix already applied — no measurement needed 
+
+  📊 IMPACTAGENT:
+  Technical:
+    Missing indexes on key columns cause full table scans or 
+    inefficient subqueries, leading to slow query execution. 
+  User Facing:
+    Users experience slow query execution times, resulting in 
+    delayed access to data. 
+  Executive:
+    Insufficient indexing poses a significant business risk, 
+    potentially leading to lost productivity and revenue. 
+  Daily Cost:
+    Estimated 593.8ms execution time translates to approximately 
+    0.5938 hours of lost productivity per query. 
+  Trajectory:
+    The issue will worsen over time as data grows, leading to 
+    increased query execution times. 
+  Urgency:
+    High — impacts all users on every query, requiring immediate 
+    attention. 
+  Fix ROI:
+    Fixing the issue will yield a significant return on investment, 
+    saving substantial daily productivity hours. 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    Missing indexes on key columns cause full table scans or 
+    inefficient subqueries, leading to slow query execution. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C3-2 Connection timeout
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'my database connection keeps timing out', 'mode': 'technical'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS
+----------------------------------------------------------------------
+
+  REASONING CHAIN (16 steps):
+    > Received query: 'my database connection keeps timing out'
+    > Searching knowledge base with confidence scoring...
+    > RAG confidence: UNCERTAIN (score: 1.2011)
+    > Top match: Anomaly - Sudden Latency Spike
+    > Delegating to DiagnosisAgent...
+    > DiagnosisAgent returned: Anomaly - Sudden Latency Spike
+    > Confidence: high
+    > Delegating to FixAgent...
+    > FixAgent generated safe SQL: ANALYZE
+    > Safety validated: True
+    > Performance: 0.22ms → 0.52ms (marginal improvement)
+    > Delegating to ImpactAgent...
+    > ImpactAgent: urgency=high — impacts all users on every query
+    > Supervisor assembling final response...
+    > Response mode: technical
+    > Response ready. Returning to user.
+
+  🔬 DIAGNOSISAGENT:
+  Problem:
+    Anomaly - Sudden Latency Spike 
+  Root Cause:
+    sudden degradation without code changes points to infrastructure 
+    causes: table bloat from accumulated dead tuples (PostgreSQL) or 
+    fragmented pages (MySQL), lock contention from a long-running 
+    transaction blocking reads, index corruption or statistics 
+    becoming stale causing optimizer to choose wrong execution plan, 
+    or autovacuum/auto-analyze not running due to configuration 
+    issues. 
+  Pattern Matched:
+    sudden 50x latency spike on previously healthy query 
+  Confidence:
+    high 
+  Similarity Score:
+    1.2011 
+  Matched Cases:
+    → Anomaly - Sudden Latency Spike
+    → Update Query Performance
+    → High Frequency Config Query
+
+  🔧 FIXAGENT:
+  SQL Executed:
+    ANALYZE 
+  Safe:
+    True 
+  Action Taken:
+    Executed: ANALYZE 
+  Query Benchmarked:
+    SELECT * FROM policy_data WHERE end_date IS NULL AND status = 
+    'active' 
+  Before MS:
+    0.22 
+  After MS:
+    0.52 
+  Improvement:
+    marginal improvement 
+
+  📊 IMPACTAGENT:
+  Technical:
+    Table bloat, lock contention, index corruption, or stale 
+    statistics are causing sudden latency spike. 
+  User Facing:
+    Users experience slow query performance and increased wait 
+    times. 
+  Executive:
+    Business suffers from reduced productivity and increased risk of 
+    data inconsistencies. 
+  Daily Cost:
+    10-20 hours 
+  Trajectory:
+    Gets worse over time as data grows and autovacuum/auto-analyze 
+    fail to run. 
+  Urgency:
+    high — impacts all users on every query 
+  Fix ROI:
+    fixing saves significant daily productivity 
+
+  💬 AUDIENCE SUMMARY:
+  Summary:
+    Table bloat, lock contention, index corruption, or stale 
+    statistics are causing sudden latency spike. 
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C3-3 Reporting executive
+  ENDPOINT: /analyze/full
+  INPUT: {'question': 'how do I optimize my insurance reporting queries', 'mode': 'executive'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ❌ FAIL — Question does not appear to be database-related.
+----------------------------------------------------------------------
+
+  ⚠️  ERROR: Question does not appear to be database-related.
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C4-1 Pasta
+  ENDPOINT: /ask
+  INPUT: {'question': 'how do I make pasta'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS — rejected correctly
+----------------------------------------------------------------------
+
+  ⚠️  ERROR: Question does not appear to be database-related.
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C4-2 ML question
+  ENDPOINT: /ask
+  INPUT: {'question': 'what is machine learning'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS — rejected correctly
+----------------------------------------------------------------------
+
+  ⚠️  ERROR: Question does not appear to be database-related.
+
+██████████████████████████████████████████████████████████████████████
+  TEST: C4-3 Hello
+  ENDPOINT: /ask
+  INPUT: {'question': 'hello'}
+██████████████████████████████████████████████████████████████████████
+
+  OVERALL: ✅ PASS — rejected correctly
+----------------------------------------------------------------------
+
+  ⚠️  ERROR: Question does not appear to be database-related.
+
+======================================================================
+  FINAL RESULTS: 11 passed · 0 warnings · 1 failed
+  TOTAL TESTS: 12
+======================================================================

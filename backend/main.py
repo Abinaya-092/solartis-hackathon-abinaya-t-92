@@ -10,7 +10,7 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from agent import SQLPerformanceAgent
 from rag import load_vectordb, build_vectordb, search_cases, search_cases_with_confidence
-
+from supervisor import SupervisorAgent
 load_dotenv()
 
 app = FastAPI(
@@ -21,6 +21,7 @@ app = FastAPI(
 
 # ── Startup ───────────────────────────────────────────────────────
 agent = SQLPerformanceAgent()
+supervisor = SupervisorAgent()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_PATH = os.path.join(BASE_DIR, "..", "dataset.json")
@@ -55,7 +56,7 @@ class AnomalyRequest(BaseModel):
 class AskRequest(BaseModel):
     question: str
 
-    
+
 # ── Endpoint 1: /analyze/query ────────────────────────────────────
 @app.post("/analyze/query")
 def analyze_query(request: QueryRequest):
@@ -405,12 +406,54 @@ def analyze_and_fix_endpoint(request: QueryRequest):
         return {"error": "LLM returned non-JSON."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+# ── Request model ─────────────────────────────────────────────────
+class FullAnalysisRequest(BaseModel):
+    question: str
+    mode: str = "technical"  # technical | simple | executive
+
+# ── Endpoint 6: /analyze/full — Multi-Agent Orchestration ─────────
+@app.post("/analyze/full")
+def analyze_full(request: FullAnalysisRequest):
+    """
+    Full multi-agent analysis.
+    Supervisor orchestrates DiagnosisAgent, FixAgent, ImpactAgent.
+    Returns diagnosis + fix proof + business impact + reasoning chain.
+    """
+    try:
+        if not any(word in request.question.lower() for word in DB_KEYWORDS):
+            return {
+                "status": "rejected",
+                "error": "Question does not appear to be database-related.",
+                "confidence": "low"
+            }
+
+        if request.mode not in {"technical", "simple", "executive"}:
+            return {
+                "status": "rejected",
+                "error": "Invalid mode. Use: technical, simple, or executive"
+            }
+
+        result = supervisor.run(
+            question=request.question,
+            mode=request.mode
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))  
 
 # ── Health check ──────────────────────────────────────────────────
 @app.get("/")
 def root():
     return {
         "status": "running",
-        "endpoints": ["/analyze/query", "/detect/anomaly", "/suggest/optimization", "/ask","/analyze/and/fix"]
+        "endpoints": [
+            "/analyze/query",
+            "/detect/anomaly",
+            "/suggest/optimization",
+            "/ask",
+            "/analyze/and/fix",
+            "/analyze/full"
+        ]
     }

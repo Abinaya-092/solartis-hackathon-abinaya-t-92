@@ -1,13 +1,15 @@
 import os
 import json
 import re
+from database import init_db, DB_PATH
+from executor import analyze_and_fix
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from rag import load_vectordb, build_vectordb, search_cases
 from agent import SQLPerformanceAgent
+from rag import load_vectordb, build_vectordb, search_cases, search_cases_with_confidence
 
 load_dotenv()
 
@@ -30,6 +32,8 @@ if not os.path.exists(CHROMA_PATH):
 else:
     print("chroma_db found. Loading existing DB...")
 
+init_db()
+
 # ── DB keywords for domain validation ────────────────────────────
 DB_KEYWORDS = ["query", "select", "table", "index", "slow", "database",
                "sql", "join", "update", "scan", "insert", "delete",
@@ -51,6 +55,7 @@ class AnomalyRequest(BaseModel):
 class AskRequest(BaseModel):
     question: str
 
+    
 # ── Endpoint 1: /analyze/query ────────────────────────────────────
 @app.post("/analyze/query")
 def analyze_query(request: QueryRequest):
@@ -59,6 +64,7 @@ def analyze_query(request: QueryRequest):
     Returns: problem, root_cause, suggestion, confidence.
     """
     try:
+        # Domain validation
         if not any(word in request.query.lower() for word in DB_KEYWORDS):
             return {
                 "error": "Query does not appear to be database-related.",
@@ -70,7 +76,31 @@ def analyze_query(request: QueryRequest):
         if request.execution_time != "unknown":
             search_query += f" execution time {request.execution_time}"
 
-        docs = search_cases(search_query, k=3)
+        # Confidence-aware search
+        search_result = search_cases_with_confidence(search_query, k=3)
+
+        # Out of scope — reject cleanly
+        if search_result["confidence_level"] == "out_of_scope":
+            return {
+                "error": "Query pattern is outside my knowledge base.",
+                "suggestion": "This system specializes in SQL performance issues. Try describing a specific slow query pattern.",
+                "confidence": "low",
+                "similarity_score": search_result["best_score"]
+            }
+
+        # Uncertain — return honest message without wasting LLM call
+        if search_result["confidence_level"] == "uncertain":
+            docs = search_result["docs"]
+            return {
+                "warning": "This query pattern is not well represented in my knowledge base.",
+                "closest_match": docs[0].metadata["title"] if docs else "none",
+                "suggestion": "Try rephrasing with more specific SQL performance terms.",
+                "confidence": "low",
+                "similarity_score": search_result["best_score"]
+            }
+
+        # Confident match — full analysis
+        docs = search_result["docs"]
         raw = agent.analyze(request.query, docs)
         result = json.loads(raw)
 
@@ -78,14 +108,14 @@ def analyze_query(request: QueryRequest):
             result["confidence"] = "high"
 
         result["matched_cases"] = [d.metadata["title"] for d in docs]
+        result["similarity_score"] = search_result["best_score"]
         return result
 
     except json.JSONDecodeError:
         return {"raw_response": raw, "error": "LLM returned non-JSON."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
+    
 # ── Endpoint 2: /detect/anomaly ───────────────────────────────────
 @app.post("/detect/anomaly")
 def detect_anomaly(request: AnomalyRequest):
@@ -230,19 +260,43 @@ Return ONLY one word: anomaly, optimization, or analysis
         if intent not in {"anomaly", "optimization", "analysis"}:
             intent = "analysis"
 
-        # Step 3: Route to the right logic
+        # Step 3: Confidence-aware search
         if intent == "anomaly":
-            docs = search_cases(f"sudden latency spike anomaly {question}", k=2)
+            search_query = f"sudden latency spike anomaly {question}"
+        elif intent == "optimization":
+            search_query = question
+        else:
+            search_query = question
+
+        search_result = search_cases_with_confidence(search_query, k=3)
+
+        # Out of scope — reject cleanly
+        if search_result["confidence_level"] == "out_of_scope":
+            return {
+                "error": "Query pattern is outside my knowledge base.",
+                "suggestion": "This system specializes in SQL performance issues. Try describing a specific slow query pattern.",
+                "confidence": "low",
+                "intent_detected": intent,
+                "similarity_score": search_result["best_score"]
+            }
+
+        docs = search_result["docs"]
+
+        # Step 4: Route to the right logic
+        if intent == "anomaly":
             raw = agent.analyze(question, docs)
             result = json.loads(raw)
             if result.get("confidence") not in VALID_CONFIDENCE:
                 result["confidence"] = "high"
+            if search_result["confidence_level"] == "uncertain":
+                result["confidence"] = "low"
+                result["warning"] = search_result["warning"]
             result["intent_detected"] = "anomaly"
             result["matched_cases"] = [d.metadata["title"] for d in docs]
+            result["similarity_score"] = search_result["best_score"]
             return result
 
         elif intent == "optimization":
-            docs = search_cases(question, k=3)
             context_str = "\n\n".join([
                 f"Case: {d.metadata['title']}\nSuggestion: {d.metadata['suggestion']}\nSeverity: {d.metadata['severity']}\nSpecific Impact: {d.metadata['suggestion']}"
                 for d in docs
@@ -254,11 +308,7 @@ You are a Database Reliability Engineer. Return ONLY a JSON object.
 QUESTION: {question}
 RELEVANT CASES: {context}
 
-Priority rules: 
-- "high" = fixes the core performance problem directly
-- "medium" = important but secondary improvement  
-- "low" = nice to have, minimal immediate impact
-Not everything can be high priority. Distribute priorities realistically.
+Priority must be one of: high, medium, low.
 Impact must be specific and measurable like "eliminates full table scan" or "reduces DB load by 90%".
 
 Return ONLY this JSON:
@@ -281,30 +331,86 @@ Return ONLY this JSON:
             for opt in result.get("optimizations", []):
                 if opt.get("priority") not in VALID_PRIORITY:
                     opt["priority"] = "high"
+            if search_result["confidence_level"] == "uncertain":
+                result["confidence"] = "low"
+                result["warning"] = search_result["warning"]
 
             result["intent_detected"] = "optimization"
+            result["similarity_score"] = search_result["best_score"]
             return result
 
         else:  # analysis (default)
-            docs = search_cases(question, k=3)
+            # If uncertain — don't waste LLM call, return honest message
+            if search_result["confidence_level"] == "uncertain":
+                return {
+                    "warning": "This query pattern is not well represented in my knowledge base.",
+                    "closest_match": docs[0].metadata["title"] if docs else "none",
+                    "suggestion": "Try rephrasing with more specific SQL performance terms, or consult a DBA for this pattern.",
+                    "confidence": "low",
+                    "intent_detected": intent,
+                    "similarity_score": search_result["best_score"]
+                }
+
             raw = agent.analyze(question, docs)
             result = json.loads(raw)
             if result.get("confidence") not in VALID_CONFIDENCE:
                 result["confidence"] = "high"
             result["intent_detected"] = "analysis"
             result["matched_cases"] = [d.metadata["title"] for d in docs]
+            result["similarity_score"] = search_result["best_score"]
             return result
 
     except json.JSONDecodeError:
         return {"raw_response": raw, "error": "LLM returned non-JSON."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# ── Endpoint 5: /analyze/and/fix ──────────────────────────────────
+@app.post("/analyze/and/fix")
+def analyze_and_fix_endpoint(request: QueryRequest):
+    """
+    Full agentic loop — diagnoses the problem AND fixes it.
+    Returns before/after performance proof.
+    """
+    try:
+        if not any(word in request.query.lower() for word in DB_KEYWORDS):
+            return {
+                "error": "Query does not appear to be database-related.",
+                "confidence": "low"
+            }
 
+        # Step 1 — RAG + LLM diagnosis
+        docs = search_cases(request.query, k=3)
+        raw = agent.analyze(request.query, docs)
+        diagnosis = json.loads(raw)
+
+        if diagnosis.get("confidence") not in VALID_CONFIDENCE:
+            diagnosis["confidence"] = "high"
+
+        # Step 2 — Agentic fix + measurement
+        fix_proof = analyze_and_fix(
+            problem=diagnosis.get("problem", ""),
+            root_cause=diagnosis.get("root_cause", ""),
+            suggestion=diagnosis.get("suggestion", ""),
+            user_query=request.query  # ADD THIS
+        )
+
+        # Step 3 — Combine diagnosis + proof
+        return {
+            "diagnosis": diagnosis,
+            "proof": fix_proof,
+            "matched_cases": [d.metadata["title"] for d in docs]
+        }
+
+    except json.JSONDecodeError:
+        return {"error": "LLM returned non-JSON."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 
 # ── Health check ──────────────────────────────────────────────────
 @app.get("/")
 def root():
     return {
         "status": "running",
-        "endpoints": ["/analyze/query", "/detect/anomaly", "/suggest/optimization", "/ask"]
+        "endpoints": ["/analyze/query", "/detect/anomaly", "/suggest/optimization", "/ask","/analyze/and/fix"]
     }

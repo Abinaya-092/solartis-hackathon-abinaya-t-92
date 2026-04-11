@@ -239,5 +239,29 @@
     "detection_signals": "High query count on knowledge_base table in performance schema, query appears in every request trace, database CPU high despite simple queries",
     "estimated_rows_examined": "all rows in category group before filtering by key — potentially thousands per query",
     "fix_validation": "After composite index, query drops from 3 seconds to under 10ms. After application-level caching, knowledge_base queries disappear from database monitoring entirely."
-  }
+  },
+  {
+    "case_id": 11,
+    "title": "Missing Index on Frequently Filtered Column",
+    "query": "SELECT * FROM policy_data WHERE status = 'ACTIVE'",
+    "execution_time": "high - slow on large tables despite simple WHERE clause",
+    "frequency": "very high",
+    "context": "Filter by low-cardinality column with no index, full table scan on policy_data, status column queried constantly but never indexed",
+    "problem": "Missing index on frequently filtered column causes full table scan",
+    "root_cause": "No index on the status column forces a full table scan on every query. The database reads every single row to find matching records even though only a fraction match the condition.",
+    "suggestion": "Add index on status column. Create index on policy_data(status) to enable index scan instead of full table scan. This converts a full scan to a targeted lookup.",
+    "severity": "high",
+    "symptoms": [
+      "SELECT query with simple WHERE clause is slow",
+      "filter by status column is taking too long",
+      "query on status ACTIVE or EXPIRED is slow",
+      "simple lookup query is slow despite small result set",
+      "query runs fine on small database but slow on production"
+    ],
+    "related_patterns": ["missing index", "full table scan", "unindexed column", "low cardinality index"],
+    "real_world_context": "Insurance platforms constantly filter policies by status for billing, renewals, and reporting. A missing index on status makes every such query a full table scan across millions of records.",
+    "detection_signals": "EXPLAIN shows type=ALL despite simple WHERE clause",
+    "estimated_rows_examined": "entire policy_data table regardless of matching rows",
+    "fix_validation": "After adding index on status, query drops from 150ms to under 5ms. EXPLAIN shows type=ref."
+}
 ]

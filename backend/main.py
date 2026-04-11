@@ -16,8 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 app = FastAPI(
-    title="Solartis SQL Performance Analyzer",
-    description="RAG-powered SQL query analysis API",
+    title="SQL Performance Analyzer",
+    description="Multi-Agent RAG-powered SQL query analysis API",
     version="1.0.0"
 )
 
@@ -27,6 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # ── Startup ───────────────────────────────────────────────────────
 agent = SQLPerformanceAgent()
 supervisor = SupervisorAgent()
@@ -43,13 +44,47 @@ else:
 
 init_db()
 
-# ── DB keywords for domain validation ────────────────────────────
-DB_KEYWORDS = ["query", "select", "table", "index", "slow", "database",
-               "sql", "join", "update", "scan", "insert", "delete",
-               "latency", "timeout", "performance", "cache", "lock"]
-
 VALID_CONFIDENCE = {"high", "medium", "low"}
 VALID_PRIORITY = {"high", "medium", "low"}
+
+# ── Smart domain validation ───────────────────────────────────────
+OBVIOUS_DB_KEYWORDS = [
+    "select", "query", "sql", "table", "index", "database",
+    "join", "slow", "latency", "performance", "update", "insert",
+    "delete", "scan", "timeout", "cache", "lock", "optimize",
+    "procedure", "execution", "reporting", "queries"
+]
+
+def is_db_related(question: str) -> bool:
+    """
+    Checks if a question is database/performance related.
+    First tries fast keyword check, then falls back to LLM for ambiguous cases.
+    """
+    q = question.lower()
+
+    # Fast path — obvious DB keywords
+    if any(word in q for word in OBVIOUS_DB_KEYWORDS):
+        return True
+
+    # Obvious non-DB — reject immediately without LLM call
+    NON_DB_KEYWORDS = ["pasta", "recipe", "cook", "movie", "weather",
+                       "football", "cricket", "music", "song", "food"]
+    if any(word in q for word in NON_DB_KEYWORDS):
+        return False
+
+    # Ambiguous — use LLM to decide
+    try:
+        llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+        prompt = f"""Is this question related to database performance, SQL queries, system performance, or data retrieval issues?
+
+Question: "{question}"
+
+Reply with only YES or NO."""
+        response = llm.invoke(prompt).content.strip().upper()
+        return "YES" in response
+    except:
+        return True  # Default to allowing if LLM fails
+
 
 # ── Request models ────────────────────────────────────────────────
 class QueryRequest(BaseModel):
@@ -64,6 +99,10 @@ class AnomalyRequest(BaseModel):
 class AskRequest(BaseModel):
     question: str
 
+class FullAnalysisRequest(BaseModel):
+    question: str
+    mode: str = "technical"
+
 
 # ── Endpoint 1: /analyze/query ────────────────────────────────────
 @app.post("/analyze/query")
@@ -73,8 +112,7 @@ def analyze_query(request: QueryRequest):
     Returns: problem, root_cause, suggestion, confidence.
     """
     try:
-        # Domain validation
-        if not any(word in request.query.lower() for word in DB_KEYWORDS):
+        if not is_db_related(request.query):
             return {
                 "error": "Query does not appear to be database-related.",
                 "suggestion": "Please describe a SQL performance issue.",
@@ -85,19 +123,16 @@ def analyze_query(request: QueryRequest):
         if request.execution_time != "unknown":
             search_query += f" execution time {request.execution_time}"
 
-        # Confidence-aware search
         search_result = search_cases_with_confidence(search_query, k=3)
 
-        # Out of scope — reject cleanly
         if search_result["confidence_level"] == "out_of_scope":
             return {
                 "error": "Query pattern is outside my knowledge base.",
-                "suggestion": "This system specializes in SQL performance issues. Try describing a specific slow query pattern.",
+                "suggestion": "Try describing a specific slow query pattern.",
                 "confidence": "low",
                 "similarity_score": search_result["best_score"]
             }
 
-        # Uncertain — return honest message without wasting LLM call
         if search_result["confidence_level"] == "uncertain":
             docs = search_result["docs"]
             return {
@@ -108,7 +143,6 @@ def analyze_query(request: QueryRequest):
                 "similarity_score": search_result["best_score"]
             }
 
-        # Confident match — full analysis
         docs = search_result["docs"]
         raw = agent.analyze(request.query, docs)
         result = json.loads(raw)
@@ -124,7 +158,8 @@ def analyze_query(request: QueryRequest):
         return {"raw_response": raw, "error": "LLM returned non-JSON."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 # ── Endpoint 2: /detect/anomaly ───────────────────────────────────
 @app.post("/detect/anomaly")
 def detect_anomaly(request: AnomalyRequest):
@@ -173,7 +208,7 @@ def suggest_optimization(request: QueryRequest):
     Returns: optimizations list with priority and impact.
     """
     try:
-        if not any(word in request.query.lower() for word in DB_KEYWORDS):
+        if not is_db_related(request.query):
             return {
                 "error": "Query does not appear to be database-related.",
                 "suggestion": "Please describe a SQL performance issue.",
@@ -195,10 +230,9 @@ QUERY PATTERN: {question}
 RELEVANT CASES:
 {context}
 
-Return ONLY this exact JSON format.
-Priority rules: 
+Priority rules:
 - "high" = fixes the core performance problem directly
-- "medium" = important but secondary improvement  
+- "medium" = important but secondary improvement
 - "low" = nice to have, minimal immediate impact
 Not everything can be high priority. Distribute priorities realistically.
 Impact must be a specific measurable outcome like "eliminates full table scan" or "reduces DB load by 90%":
@@ -241,15 +275,13 @@ def ask(request: AskRequest):
     try:
         question = request.question.strip()
 
-        # Step 1: Domain validation
-        if not any(word in question.lower() for word in DB_KEYWORDS):
+        if not is_db_related(question):
             return {
                 "error": "Question does not appear to be database-related.",
                 "suggestion": "Try asking about slow queries, indexes, joins, or performance issues.",
                 "confidence": "low"
             }
 
-        # Step 2: Intent detection
         intent_llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
         intent_prompt = ChatPromptTemplate.from_template("""
 You are a query intent classifier. Read the user's question carefully.
@@ -269,21 +301,17 @@ Return ONLY one word: anomaly, optimization, or analysis
         if intent not in {"anomaly", "optimization", "analysis"}:
             intent = "analysis"
 
-        # Step 3: Confidence-aware search
         if intent == "anomaly":
             search_query = f"sudden latency spike anomaly {question}"
-        elif intent == "optimization":
-            search_query = question
         else:
             search_query = question
 
         search_result = search_cases_with_confidence(search_query, k=3)
 
-        # Out of scope — reject cleanly
         if search_result["confidence_level"] == "out_of_scope":
             return {
                 "error": "Query pattern is outside my knowledge base.",
-                "suggestion": "This system specializes in SQL performance issues. Try describing a specific slow query pattern.",
+                "suggestion": "Try describing a specific slow query pattern.",
                 "confidence": "low",
                 "intent_detected": intent,
                 "similarity_score": search_result["best_score"]
@@ -291,7 +319,6 @@ Return ONLY one word: anomaly, optimization, or analysis
 
         docs = search_result["docs"]
 
-        # Step 4: Route to the right logic
         if intent == "anomaly":
             raw = agent.analyze(question, docs)
             result = json.loads(raw)
@@ -299,7 +326,7 @@ Return ONLY one word: anomaly, optimization, or analysis
                 result["confidence"] = "high"
             if search_result["confidence_level"] == "uncertain":
                 result["confidence"] = "low"
-                result["warning"] = search_result["warning"]
+                result["warning"] = search_result.get("warning", "")
             result["intent_detected"] = "anomaly"
             result["matched_cases"] = [d.metadata["title"] for d in docs]
             result["similarity_score"] = search_result["best_score"]
@@ -318,7 +345,7 @@ QUESTION: {question}
 RELEVANT CASES: {context}
 
 Priority must be one of: high, medium, low.
-Impact must be specific and measurable like "eliminates full table scan" or "reduces DB load by 90%".
+Impact must be specific and measurable.
 
 Return ONLY this JSON:
 {{
@@ -342,19 +369,18 @@ Return ONLY this JSON:
                     opt["priority"] = "high"
             if search_result["confidence_level"] == "uncertain":
                 result["confidence"] = "low"
-                result["warning"] = search_result["warning"]
+                result["warning"] = search_result.get("warning", "")
 
             result["intent_detected"] = "optimization"
             result["similarity_score"] = search_result["best_score"]
             return result
 
-        else:  # analysis (default)
-            # If uncertain — don't waste LLM call, return honest message
+        else:  # analysis
             if search_result["confidence_level"] == "uncertain":
                 return {
                     "warning": "This query pattern is not well represented in my knowledge base.",
                     "closest_match": docs[0].metadata["title"] if docs else "none",
-                    "suggestion": "Try rephrasing with more specific SQL performance terms, or consult a DBA for this pattern.",
+                    "suggestion": "Try rephrasing with more specific SQL performance terms.",
                     "confidence": "low",
                     "intent_detected": intent,
                     "similarity_score": search_result["best_score"]
@@ -373,6 +399,8 @@ Return ONLY this JSON:
         return {"raw_response": raw, "error": "LLM returned non-JSON."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Endpoint 5: /analyze/and/fix ──────────────────────────────────
 @app.post("/analyze/and/fix")
 def analyze_and_fix_endpoint(request: QueryRequest):
@@ -381,13 +409,12 @@ def analyze_and_fix_endpoint(request: QueryRequest):
     Returns before/after performance proof.
     """
     try:
-        if not any(word in request.query.lower() for word in DB_KEYWORDS):
+        if not is_db_related(request.query):
             return {
                 "error": "Query does not appear to be database-related.",
                 "confidence": "low"
             }
 
-        # Step 1 — RAG + LLM diagnosis
         docs = search_cases(request.query, k=3)
         raw = agent.analyze(request.query, docs)
         diagnosis = json.loads(raw)
@@ -395,15 +422,13 @@ def analyze_and_fix_endpoint(request: QueryRequest):
         if diagnosis.get("confidence") not in VALID_CONFIDENCE:
             diagnosis["confidence"] = "high"
 
-        # Step 2 — Agentic fix + measurement
         fix_proof = analyze_and_fix(
             problem=diagnosis.get("problem", ""),
             root_cause=diagnosis.get("root_cause", ""),
             suggestion=diagnosis.get("suggestion", ""),
-            user_query=request.query  # ADD THIS
+            user_query=request.query
         )
 
-        # Step 3 — Combine diagnosis + proof
         return {
             "diagnosis": diagnosis,
             "proof": fix_proof,
@@ -415,10 +440,6 @@ def analyze_and_fix_endpoint(request: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ── Request model ─────────────────────────────────────────────────
-class FullAnalysisRequest(BaseModel):
-    question: str
-    mode: str = "technical"  # technical | simple | executive
 
 # ── Endpoint 6: /analyze/full — Multi-Agent Orchestration ─────────
 @app.post("/analyze/full")
@@ -426,13 +447,12 @@ def analyze_full(request: FullAnalysisRequest):
     """
     Full multi-agent analysis.
     Supervisor orchestrates DiagnosisAgent, FixAgent, ImpactAgent.
-    Returns diagnosis + fix proof + business impact + reasoning chain.
     """
     try:
-        if not any(word in request.question.lower() for word in DB_KEYWORDS):
+        if not is_db_related(request.question):
             return {
-                "status": "rejected",
                 "error": "Question does not appear to be database-related.",
+                "suggestion": "Please describe a SQL performance issue.",
                 "confidence": "low"
             }
 
@@ -449,11 +469,16 @@ def analyze_full(request: FullAnalysisRequest):
         return result
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
-    
-     
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Endpoint 7: /suggest/similar ─────────────────────────────────
 @app.post("/suggest/similar")
 def suggest_similar(request: AskRequest):
+    """
+    Given a vague query, generates dynamic similar example queries
+    based on known performance patterns.
+    """
     try:
         llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.3)
         prompt = ChatPromptTemplate.from_template("""
@@ -493,6 +518,7 @@ Return ONLY a JSON array of 4 strings. No markdown, no explanation.
             "Query suddenly spiked from 1s to 50s with no code changes",
             "SELECT * FROM large_table with no WHERE clause is very slow"
         ]}
+
 
 # ── Health check ──────────────────────────────────────────────────
 @app.get("/")

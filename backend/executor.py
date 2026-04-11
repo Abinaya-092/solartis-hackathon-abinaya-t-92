@@ -21,6 +21,8 @@ def is_safe_sql(sql: str) -> bool:
     """
     if not sql or sql.upper() == "NONE":
         return False
+    # Take only the FIRST statement if multiple are generated
+    sql = sql.split(";")[0].strip()
     cleaned = sql.strip().upper()
     return any(cleaned.startswith(prefix) for prefix in SAFE_PREFIXES)
 
@@ -93,14 +95,25 @@ def apply_fix(sql: str) -> dict:
     """
     Applies the LLM-generated, safety-validated SQL fix.
     Checks if fix already exists before applying.
+    Takes only the first SQL statement if multiple are generated.
     """
+    # Take only first statement — LLM sometimes generates multiple
+    sql = sql.split(";")[0].strip()
+
+    if not sql:
+        return {
+            "action_taken": "No valid SQL to execute",
+            "already_existed": False,
+            "sql_executed": None
+        }
+
     conn = get_connection()
     try:
         # Check if already exists (for index creation)
         if sql.upper().startswith("CREATE INDEX"):
             if index_exists(conn, sql):
                 return {
-                    "action_taken": f"Index already exists — skipped",
+                    "action_taken": "Index already exists — skipped",
                     "already_existed": True,
                     "sql_executed": sql
                 }

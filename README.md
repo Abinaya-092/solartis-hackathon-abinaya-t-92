@@ -244,22 +244,19 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## Test Examples
+## 🧪 Test Examples
 
-Once running, try these in the frontend or via `http://localhost:8000/docs`:
+Once the system is running, try these queries in the frontend:
 
-### Happy Path — Clear Diagnosis
+### Category 1 — Happy Path (Confident Diagnosis + Fix)
 ```
 SELECT * FROM policy_data WHERE status = 'ACTIVE' is taking too long
 ```
 ```
-My JSON query using JSON_EXTRACT in WHERE clause is taking 25 seconds
-```
-```
-query on large_table with no WHERE clause is extremely slow
+policy search is very slow today
 ```
 
-### Anomaly Detection
+### Category 2 — Anomaly Detection
 ```
 my query suddenly spiked from 1 second to 50 seconds with no code changes
 ```
@@ -267,26 +264,36 @@ my query suddenly spiked from 1 second to 50 seconds with no code changes
 database was fine yesterday but extremely slow today
 ```
 
-### Executive Mode (select Executive mode first)
-```
-our database queries are slow and affecting customers
-```
-
-### Edge Cases — System handles gracefully
+### Category 3 — Edge Cases (Uncertain — Fix Skipped Safely)
 ```
 stored procedure execution is slow
 ```
 ```
 my database connection keeps timing out
 ```
+```
+how do I optimize my insurance reporting queries
+```
 
-### Out of Scope — System rejects cleanly
+### Category 4 — Out of Scope (Clean Rejection)
 ```
 how do I make pasta
 ```
 ```
 what is machine learning
 ```
+```
+hello
+```
+
+### Mode Testing (use same query, switch modes)
+```
+our database queries are slow and affecting customers
+```
+> Try this in Technical, Simple, and Executive modes to see audience-aware responses.
+
+### Direct API Testing
+Open `http://localhost:8000/docs` for interactive API documentation.
 
 ### Direct API Testing
 Open `http://localhost:8000/docs` for interactive API documentation.
@@ -397,6 +404,9 @@ I evaluated four advanced RAG strategies:
 ### Why three separate agents instead of one LLM call?
 Single responsibility principle. Each agent has one job, one system prompt, one output schema. This makes the system debuggable, testable, and extensible. Adding a new agent (e.g., a PredictionAgent for future trajectory) requires zero changes to existing agents.
 
+### Why LLM-based domain validation over keyword matching?
+Early versions used a fixed keyword list for domain validation. This rejected valid queries like "how do I optimize my insurance reporting queries" because "insurance" wasn't in the list. The current approach uses fast keyword matching for obvious cases, then falls back to an LLM call for ambiguous queries — giving flexibility without sacrificing accuracy.
+
 ---
 
 ## Production Scaling Considerations
@@ -477,7 +487,7 @@ As required by the challenge guidelines:
 - Evaluated HyDE, reranking, multi-query RAG — and consciously chose NOT to implement them
 - Skipped fix execution on uncertain confidence — because a wrong fix is worse than no fix
 
-Temperature = 0. Consistent. Deterministic. No creativity in the LLM. All creativity from me.
+My temperature? Always 1. Curious, creative, and full of ideas.
 
 ---
 

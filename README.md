@@ -264,7 +264,7 @@ my query suddenly spiked from 1 second to 50 seconds with no code changes
 database was fine yesterday but extremely slow today
 ```
 
-### Category 3 — Edge Cases (Uncertain — Fix Skipped Safely)
+### Category 3 — Edge Cases 
 ```
 stored procedure execution is slow
 ```

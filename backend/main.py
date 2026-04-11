@@ -11,6 +11,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from agent import SQLPerformanceAgent
 from rag import load_vectordb, build_vectordb, search_cases, search_cases_with_confidence
 from supervisor import SupervisorAgent
+from fastapi.middleware.cors import CORSMiddleware
+
 load_dotenv()
 
 app = FastAPI(
@@ -19,6 +21,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # ── Startup ───────────────────────────────────────────────────────
 agent = SQLPerformanceAgent()
 supervisor = SupervisorAgent()

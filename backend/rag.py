@@ -54,10 +54,6 @@ def load_vectordb():
         embedding_function=embeddings
     )
 
-def search_cases(query, k=3):
-    vectordb = load_vectordb()
-    return vectordb.similarity_search(query, k=k)
-
 def search_cases_with_confidence(query, k=3):
     """
     Searches with similarity scoring.
